@@ -1,0 +1,40 @@
+:root {
+  /* Primary colors */
+  --purple: #8A2BE2;
+  --yellow: #FFD700;
+  --pink: #FF69B4;
+  
+  /* Shades and tints */
+  --dark-purple: #4B0082;
+  --light-purple: #9370DB;
+  --dark-yellow: #DAA520;
+  --light-yellow: #FFFFE0;
+  --dark-pink: #C71585;
+  --light-pink: #FFC0CB;
+  
+  /* Gradients */
+  --purple-to-pink-gradient: linear-gradient(to right, var(--purple), var(--pink));
+  --yellow-to-pink-gradient: linear-gradient(to right, var(--yellow), var(--pink));
+  --purple-to-yellow-gradient: linear-gradient(to right, var(--purple), var(--yellow));
+  --tri-color-gradient: linear-gradient(to right, var(--purple), var(--pink), var(--yellow));
+  
+  /* Background gradients */
+  --header-gradient: linear-gradient(45deg, var(--dark-purple), var(--purple));
+  --button-gradient: linear-gradient(to right, var(--pink), var(--purple));
+  --card-gradient: linear-gradient(to bottom right, var(--light-purple), var(--light-pink));
+  
+  /* Transparency variants */
+  --purple-transparent: rgba(138, 43, 226, 0.8);
+  --yellow-transparent: rgba(255, 215, 0, 0.8);
+  --pink-transparent: rgba(255, 105, 180, 0.8);
+}
+html{
+  scroll-behavior: smooth;
+}
+::-webkit-scrollbar{
+  scrollbar-width: none;
+}
+body{
+  margin: 0;
+  padding: 0;
+}
