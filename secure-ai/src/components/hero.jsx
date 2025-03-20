@@ -1,49 +1,53 @@
-import {useGSAP} from '@gsap/react';
+import React, { useRef } from 'react';
+import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
-import { useRef } from 'react';
-import React from 'react';
+import heroImage from '../assets/test image.jpg';
 import './styling/hero.css';
 
 const Hero = () => {
-    const heroRef = useRef();
-    const textRef = useRef();
-    const buttonRef = useRef();
-    const imageRef = useRef();
-    
-    gsap.registerPlugin(useGSAP);
+    const heroRef = useRef(null);
+    const textRef = useRef(null);
+    const buttonRef = useRef(null);
+    const imageRef = useRef(null);
     
     useGSAP(() => {
-        const tl = gsap.timeline();
+        // Initial setup
+        gsap.set(textRef.current, { opacity: 0, x: -50 });
+        gsap.set(buttonRef.current, { opacity: 0, y: 20 });
+        gsap.set(imageRef.current, { opacity: 0, scale: 0.9 });
         
-        tl.fromTo(textRef.current, 
-            { opacity: 0, y: 50 }, 
-            { opacity: 1, y: 0, duration: 1.2, ease: "power3.out" }
-        );
+        // Animate hero text and buttons on load
+        const initialTl = gsap.timeline({ defaults: { ease: "power3.out" } });
+        initialTl
+            .to(textRef.current, { 
+                opacity: 1, 
+                x: 0,
+                duration: 1,
+            })
+            .to(buttonRef.current, { 
+                opacity: 1, 
+                y: 0,
+                duration: 0.8
+            }, "-=0.4")
+            .to(imageRef.current, {
+                opacity: 1,
+                scale: 1,
+                duration: 1
+            }, "-=0.6");
         
-        tl.fromTo(buttonRef.current, 
-            { opacity: 0, y: 30 }, 
-            { opacity: 1, y: 0, duration: 0.8, ease: "back.out" }, 
-            "-=0.6"
-        );
-        
-        tl.fromTo(imageRef.current, 
-            { opacity: 0, scale: 0.9 }, 
-            { opacity: 1, scale: 1, duration: 1, ease: "power2.out" }, 
-            "-=0.8"
-        );
-    });
+    }, { scope: heroRef });
     
     return(
-        <section id='home' className="hero-section" ref={heroRef}>
-            <div className="hero-container">
+        <div className="hero-container">
+            <section id='home' className="hero-section" ref={heroRef}>
                 <div className="hero-content">
                     <div className="hero-text" ref={textRef}>
                         <h1>Smart Security, <span className="highlight">Smarter Surveillance</span></h1>
                         <p>
-                            Welcome to Secure-AI, where advanced technology meets effortless security. We specialize in providing innovative solutions for seamless CCTV camera monitoring with AI-powered face tracking. Our cutting-edge technology allows you to effortlessly track a single individual across multiple cameras, ensuring comprehensive surveillance and enhanced security for your property or business.
+                            Welcome to Secure-AI, where advanced technology meets effortless security. We specialize in providing innovative solutions for seamless CCTV camera monitoring with AI-powered face tracking.
                         </p>
                         <p>
-                            At Secure-AI, we are committed to making surveillance smarter and more efficient. Our AI-driven face tracking system is designed to help you monitor key areas with ease and precision, giving you peace of mind knowing that every moment is being monitored accurately.
+                            Our cutting-edge technology allows you to effortlessly track individuals across multiple cameras, ensuring comprehensive surveillance and enhanced security for your property or business.
                         </p>
                         <div className="hero-actions" ref={buttonRef}>
                             <button className="primary-btn">Get Started</button>
@@ -54,16 +58,11 @@ const Hero = () => {
                 <div className="hero-image" ref={imageRef}>
                     <div className="image-container">
                         <div className="image-overlay"></div>
-                        <img src="" alt="AI Security Camera System" />
+                        <img src={heroImage} alt="AI Security Camera System" />
                     </div>
                 </div>
-            </div>
-            <div className="hero-wave">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 320">
-                    <path fill="#4B0082" fillOpacity="0.6" d="M0,192L48,176C96,160,192,128,288,133.3C384,139,480,181,576,208C672,235,768,245,864,224C960,203,1056,149,1152,138.7C1248,128,1344,160,1392,176L1440,192L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z"></path>
-                </svg>
-            </div>
-        </section>
+            </section>
+        </div>
     );
 };
 
