@@ -40,6 +40,7 @@ html {
   scroll-behavior: smooth;
   font-size: 16px;
   font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  height: 100%;
 }
 
 body {
@@ -48,21 +49,41 @@ body {
   background-color: #121212;
   color: white;
   overflow-x: hidden;
+  height: 100%;
 }
 
 ::-webkit-scrollbar {
   scrollbar-width: none;
 }
 
+/* Video background styling */
+.video-background {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none; /* Allow interaction with elements behind the video */
+}
 
-/* Container for sections */
+.video-background video {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover; /* Cover the entire screen while maintaining aspect ratio */
+  opacity: 0.6; /* Adjust opacity so content remains visible */
+}
+
 .section-container {
   max-width: 1400px;
   margin: 0 auto;
   padding: 0 2rem;
 }
 
-/* Utility classes */
 .text-gradient {
   background: var(--tri-color-gradient);
   -webkit-background-clip: text;
@@ -70,24 +91,55 @@ body {
   color: transparent;
 }
 
-/* Add these styles to your existing App.css file */
-
+/* Ensure sections stack properly */
 .app-container {
   position: relative;
   overflow: hidden;
   width: 100%;
+  min-height: 300vh; /* Ensure enough scrolling space for all sections */
 }
 
-/* Make sure the hero section is full viewport */
-#home {
+/* Make each section full screen */
+.section {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
   min-height: 100vh;
-  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   z-index: 1;
+  background: transparent; /* Changed from black to transparent to show video */
 }
 
-/* Ensure the AddCam section properly slides over */
+/* Add a semi-transparent overlay to improve content visibility */
+.section::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(18, 18, 18, 0.7); /* Semi-transparent dark overlay */
+  z-index: -1;
+}
 
+.hero-container {
+  position: relative;
+  z-index: 2;
+}
 
+/* Navbar styling to ensure it stays on top */
+nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  z-index: 10;
+  background: rgba(18, 18, 18, 0.8); /* Semi-transparent background */
+  backdrop-filter: blur(5px); /* Blur effect for modern browsers */
+}
 
 /* Responsive adjustments */
 @media (max-width: 768px) {

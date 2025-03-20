@@ -12,21 +12,18 @@ const Hero = () => {
     
     useGSAP(() => {
         // Initial setup
-        gsap.set(textRef.current, { opacity: 0, x: -50 });
-        gsap.set(buttonRef.current, { opacity: 0, y: 20 });
+        gsap.set(textRef.current, { opacity: 0 });
+        gsap.set(buttonRef.current, { opacity: 0 });
         gsap.set(imageRef.current, { opacity: 0, scale: 0.9 });
         
-        // Animate hero text and buttons on load
         const initialTl = gsap.timeline({ defaults: { ease: "power3.out" } });
         initialTl
             .to(textRef.current, { 
                 opacity: 1, 
-                x: 0,
                 duration: 1,
             })
             .to(buttonRef.current, { 
                 opacity: 1, 
-                y: 0,
                 duration: 0.8
             }, "-=0.4")
             .to(imageRef.current, {

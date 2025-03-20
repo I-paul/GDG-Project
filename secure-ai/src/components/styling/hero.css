@@ -1,11 +1,14 @@
 /* hero.css */
-
+#home {
+  position:absolute;
+  opacity: 1;
+}
 .hero-container {
-  /* display: none; */
     position: relative;
     min-height: 100vh; 
     width: 100%;
-    margin-top: 80px; /* Space for fixed navbar */
+    margin-top: 80px; 
+    z-index: 1; 
   }
   
   .hero-section {
@@ -14,7 +17,7 @@
     height: 100vh;
     width: 100%;
     background-color: var(--dark-purple);
-    z-index: 1; /* Lower than AddCam */
+
     overflow: hidden;
 }
 
