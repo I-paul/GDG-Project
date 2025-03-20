@@ -25,79 +25,11 @@ const CamViewer = () => {
             setExpandedCamera(cameraId); // Expand clicked camera
         }
     };
+
     
-    useGSAP(() => {
-            gsap.fromTo(
-                viewerRef.current,
-                { 
-                    x: '100%',  
-                    opacity: 0, 
-                    duration: 1.3,
-                    ease: 'power2.out'
-                },
-                { 
-                    x: 0,  
-                    opacity: 1, 
-                    duration: 1.3,  
-                    ease: 'power2.out',
-                    scrollTrigger: {
-                        trigger: viewerRef.current,
-                        start: 'top bottom', 
-                        end: 'top 50%',       
-                        scrub: 1,             
-                        toggleActions: 'play reverse play reverse',  
-                        pinSpacing: false,   
-                        markers: false        
-                    }
-                }
-            );
-        // Animate camera grid items
-        gsap.fromTo(
-            '.camera-item',
-            { 
-                y: 50, 
-                opacity: 0 
-            },
-            { 
-                y: 0, 
-                opacity: 1, 
-                duration: 1.6, 
-                stagger: 0.2,
-                ease: 'back.out(1.2)',
-                scrollTrigger: {
-                    trigger: '.camera-grid',
-                    start: 'top 70%',
-                    toggleActions: 'play none none reverse'
-                }
-            }
-        );
-    });
-    
-    useEffect(() => {
-        if (expandedCamera) {
-            document.body.style.overflow = 'hidden'; // Prevent scrolling when expanded
-            gsap.to('.expanded-overlay', { 
-                opacity: 1, 
-                duration: 0.3, 
-                ease: 'power2.inOut' 
-            });
-            gsap.fromTo(
-                '.expanded-camera', 
-                { scale: 0.8, opacity: 0 }, 
-                { scale: 1, opacity: 1, duration: 0.5, ease: 'back.out(1.7)' }
-            );
-        } else {
-            document.body.style.overflow = 'auto'; // Restore scrolling
-        }
-        
-        // Cleanup function
-        return () => {
-            document.body.style.overflow = 'auto';
-        };
-    }, [expandedCamera]);
     
     return (
-        <section id="monitor" className='viewer' ref={viewerRef}>
+        <section  className='viewer' ref={viewerRef}>
             <div className="viewer-container">
                 <div className="viewer-header">
                     <h2>Live Camera <span className="highlight">Monitoring</span></h2>

@@ -28,13 +28,100 @@
   --yellow-transparent: rgba(255, 215, 0, 0.8);
   --pink-transparent: rgba(255, 105, 180, 0.8);
 }
-html{
-  scroll-behavior: smooth;
-}
-::-webkit-scrollbar{
-  scrollbar-width: none;
-}
-body{
+
+/* Base styles */
+* {
+  box-sizing: border-box;
   margin: 0;
   padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  font-size: 16px;
+  font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #121212;
+  color: white;
+  overflow-x: hidden;
+}
+
+::-webkit-scrollbar {
+  scrollbar-width: none;
+}
+
+
+/* Container for sections */
+.section-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 2rem;
+}
+
+/* Utility classes */
+.text-gradient {
+  background: var(--tri-color-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Add these styles to your existing App.css file */
+
+.app-container {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+}
+
+/* Make sure the hero section is full viewport */
+#home {
+  min-height: 100vh;
+  position: relative;
+  z-index: 1;
+}
+
+/* Ensure the AddCam section properly slides over */
+
+
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .hero-section {
+    flex-direction: column;
+  }
+  
+  .hero-content, .hero-image {
+    width: 100%;
+  }
+  
+  .monitor-content {
+    flex-direction: column;
+  }
+}
+/* Responsive breakpoints */
+/* For tablets */
+@media (max-width: 992px) {
+  html {
+    font-size: 14px;
+  }
+  
+  .section-container {
+    padding: 0 1.5rem;
+  }
+}
+
+/* For mobile phones */
+@media (max-width: 576px) {
+  html {
+    font-size: 12px;
+  }
+  
+  .section-container {
+    padding: 0 1rem;
+  }
 }
