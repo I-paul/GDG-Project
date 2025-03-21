@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from "react";
+import React, { useRef, useEffect } from "react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
@@ -6,7 +6,6 @@ import Navbar from "./components/navbar";
 import Hero from "./components/hero";
 import AddCam from "./components/addcam";
 import Contact from "./components/contact";
-// import background from './assets/background.webm';
 import "./App.css";
 
 gsap.registerPlugin(ScrollTrigger);
@@ -17,9 +16,7 @@ const App = () => {
   const addCamRef = useRef();
   const contactRef = useRef();
 
-
   useGSAP(() => {
-
     // Hero section animation
     gsap.fromTo(
       heroRef.current,

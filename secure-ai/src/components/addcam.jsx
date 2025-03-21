@@ -2,14 +2,15 @@ import React, { useRef, useState } from 'react';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import ScrollTrigger from 'gsap/ScrollTrigger';
-import { AlertCircle, CheckCircle, Camera, Edit, X } from 'lucide-react';
+import { AlertCircle, CheckCircle, Camera, Edit } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import './styling/addcam.css';
 
 const AddCam = () => {
     const addCamRef = useRef(null);
     const formRef = useRef(null);
     const cameraListRef = useRef(null);
-    const viewSectionRef = useRef(null);
+    const navigate = useNavigate();
     
     // State for camera management
     const [cameras, setCameras] = useState([
@@ -19,9 +20,6 @@ const AddCam = () => {
         { id: 4, name: "Garage Camera", status: "Online", ip: "192.168.1.104", port: "8080", username: "admin", location: "Garage" },
         { id: 5, name: "Side Gate Camera", status: "Offline", ip: "192.168.1.105", port: "8080", username: "admin", location: "Side Gate" }
     ]);
-    
-    // State for the camera being viewed
-    const [selectedCamera, setSelectedCamera] = useState(null);
     
     // State for new camera form
     const [newCamera, setNewCamera] = useState({
@@ -64,20 +62,7 @@ const AddCam = () => {
             },
             delay: 0.4
         });
-        
-        if (viewSectionRef.current) {
-            gsap.fromTo(viewSectionRef.current, { opacity: 0 }, {
-                opacity: 1,
-                duration: 2,
-                ease: "power3.out",
-                scrollTrigger: {
-                    trigger: viewSectionRef.current,
-                    start: 'top 80%',
-                    toggleActions: 'play none none reverse'
-                }
-            });
-        }
-    }, { scope: addCamRef, dependencies: [selectedCamera] });
+    }, { scope: addCamRef });
 
     // Handle form input changes
     const handleInputChange = (e) => {
@@ -106,6 +91,9 @@ const AddCam = () => {
         // Add to cameras array
         setCameras([...cameras, newCameraObj]);
         
+        // Store updated cameras in localStorage
+        localStorage.setItem('cameras', JSON.stringify([...cameras, newCameraObj]));
+        
         // Reset form
         setNewCamera({
             name: "",
@@ -133,19 +121,16 @@ const AddCam = () => {
         });
     };
 
-    // View camera function
-    const handleViewCamera = (camera) => {
-        setSelectedCamera(camera);
-        
-        // Scroll to view section
-        setTimeout(() => {
-            viewSectionRef.current.scrollIntoView({ behavior: 'smooth' });
-        }, 100);
+    // Navigate to camera view page
+    const handleViewCameras = () => {
+        navigate('/camera-view');
     };
-
-    // Close camera view
-    const handleCloseView = () => {
-        setSelectedCamera(null);
+    
+    // Handle editing camera
+    const handleEditCamera = (cameraId) => {
+        // You can implement the edit functionality here
+        // For now, just navigate to camera view
+        navigate('/camera-view');
     };
 
     return (
@@ -165,7 +150,10 @@ const AddCam = () => {
                                         <span className="status-text">{camera.status}</span>
                                     </div>
                                     <div className="camera-actions">
-                                        <button className="edit-btn">
+                                        <button 
+                                            className="edit-btn"
+                                            onClick={() => handleEditCamera(camera.id)}
+                                        >
                                             <Edit size={16} />
                                         </button>
                                     </div>
@@ -176,7 +164,7 @@ const AddCam = () => {
                         <div className="view-all-section">
                             <button 
                                 className="view-all-btn"
-                                onClick={() => handleViewCamera(cameras.find(cam => cam.status === "Online"))}
+                                onClick={handleViewCameras}
                                 disabled={!cameras.some(cam => cam.status === "Online")}
                             >
                                 <Camera size={18} />
@@ -270,45 +258,6 @@ const AddCam = () => {
                             </button>
                         </form>
                     </div>
-                </div>
-                
-                {/* Camera View Section */}
-                <div className={`camera-view-section ${selectedCamera ? 'active' : ''}`} ref={viewSectionRef}>
-                    {selectedCamera ? (
-                        <>
-                            <div className="view-header">
-                                <h3>Live View: {selectedCamera.name}</h3>
-                                <button className="close-view-btn" onClick={handleCloseView}>
-                                    <X size={20} />
-                                </button>
-                            </div>
-                            <div className="camera-feed">
-                                {/* Placeholder for camera feed */}
-                                <div className="camera-placeholder">
-                                    <Camera size={48} />
-                                    <p>Camera feed would display here ({selectedCamera.location})</p>
-                                    <div className="camera-details">
-                                        <span>IP: {selectedCamera.ip}</span>
-                                        <span>Port: {selectedCamera.port}</span>
-                                        <span>Status: {selectedCamera.status}</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="camera-controls">
-                                <button className="control-btn">Pan Left</button>
-                                <button className="control-btn">Pan Right</button>
-                                <button className="control-btn">Tilt Up</button>
-                                <button className="control-btn">Tilt Down</button>
-                                <button className="control-btn zoom-in">Zoom In</button>
-                                <button className="control-btn zoom-out">Zoom Out</button>
-                            </div>
-                        </>
-                    ) : (
-                        <div className="no-camera-selected">
-                            <AlertCircle size={48} />
-                            <p>No camera selected. Please click "View Cameras" to start monitoring.</p>
-                        </div>
-                    )}
                 </div>
             </div>
         </section>

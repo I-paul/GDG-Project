@@ -1,21 +1,34 @@
+import React, { useRef, useState, useEffect } from 'react';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import ScrollTrigger from 'gsap/ScrollTrigger';
-import { useRef, useState, useEffect } from 'react';
-import React from 'react';
+import { ArrowLeft, Camera, UserCheck, Settings } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import './styling/camview.css';
 
 const CamViewer = () => {
     const viewerRef = useRef();
-    const [cameras, setCameras] = useState([
-        { id: 1, name: 'Front Door', status: 'online' },
-        { id: 2, name: 'Back Yard', status: 'online' },
-        { id: 3, name: 'Garage', status: 'online' },
-        { id: 4, name: 'Living Room', status: 'offline' }
-    ]);
+    const navigate = useNavigate();
+    const [cameras, setCameras] = useState([]);
     const [expandedCamera, setExpandedCamera] = useState(null);
     
     gsap.registerPlugin(useGSAP, ScrollTrigger);
+    
+    // Load cameras from localStorage on component mount
+    useEffect(() => {
+        const storedCameras = localStorage.getItem('cameras');
+        if (storedCameras) {
+            setCameras(JSON.parse(storedCameras));
+        } else {
+            // Fallback to default cameras if none in localStorage
+            setCameras([
+                { id: 1, name: 'Front Door Camera', status: 'Online', location: 'Front Door' },
+                { id: 2, name: 'Back Yard Camera', status: 'Offline', location: 'Back Yard' },
+                { id: 3, name: 'Living Room Camera', status: 'Online', location: 'Living Room' },
+                { id: 4, name: 'Garage Camera', status: 'Online', location: 'Garage' }
+            ]);
+        }
+    }, []);
     
     // Function to handle camera expansion
     const expandCamera = (cameraId) => {
@@ -25,13 +38,25 @@ const CamViewer = () => {
             setExpandedCamera(cameraId); // Expand clicked camera
         }
     };
-
     
+    // Navigate back to add camera page
+    const handleBackToManagement = () => {
+        navigate('/');
+    };
+    
+    // Navigate to add camera form
+    const handleAddCamera = () => {
+        navigate('/');
+    };
     
     return (
-        <section  className='viewer' ref={viewerRef}>
+        <section className='viewer' ref={viewerRef}>
             <div className="viewer-container">
                 <div className="viewer-header">
+                    <button className="back-btn" onClick={handleBackToManagement}>
+                        <ArrowLeft size={18} />
+                        Back to Management
+                    </button>
                     <h2>Live Camera <span className="highlight">Monitoring</span></h2>
                     <p>View and track activity across all your connected cameras in real-time.</p>
                 </div>
@@ -40,13 +65,13 @@ const CamViewer = () => {
                     {cameras.map((camera) => (
                         <div 
                             key={camera.id} 
-                            className={`camera-item ${camera.status}`}
-                            onClick={() => camera.status === 'online' && expandCamera(camera.id)}
+                            className={`camera-item ${camera.status.toLowerCase()}`}
+                            onClick={() => camera.status.toLowerCase() === 'online' && expandCamera(camera.id)}
                         >
                             <div className="camera-feed">
                                 {/* Placeholder for actual camera feed */}
                                 <div className="camera-placeholder">
-                                    {camera.status === 'online' ? (
+                                    {camera.status.toLowerCase() === 'online' ? (
                                         <>
                                             <div className="placeholder-icon"></div>
                                             <div className="live-indicator">LIVE</div>
@@ -62,19 +87,20 @@ const CamViewer = () => {
                             
                             <div className="camera-info">
                                 <h3>{camera.name}</h3>
-                                <div className={`status-indicator ${camera.status}`}>
+                                <p className="camera-location">{camera.location}</p>
+                                <div className={`status-indicator ${camera.status.toLowerCase()}`}>
                                     <span className="status-dot"></span>
                                     <span className="status-text">{camera.status}</span>
                                 </div>
                             </div>
                             
-                            {camera.status === 'online' && (
+                            {camera.status.toLowerCase() === 'online' && (
                                 <div className="camera-controls">
                                     <button className="control-btn expand-btn">
                                         <span className="icon">⤢</span>
                                     </button>
                                     <button className="control-btn track-btn">
-                                        <span className="icon">👤</span>
+                                        <UserCheck size={16} />
                                     </button>
                                 </div>
                             )}
@@ -83,8 +109,10 @@ const CamViewer = () => {
                 </div>
                 
                 <div className="viewer-footer">
-                    <p>Connected Cameras: <span className="connected-count">{cameras.filter(c => c.status === 'online').length}/{cameras.length}</span></p>
-                    <button className="add-camera-btn">
+                    <p>Connected Cameras: <span className="connected-count">
+                        {cameras.filter(c => c.status.toLowerCase() === 'online').length}/{cameras.length}
+                    </span></p>
+                    <button className="add-camera-btn" onClick={handleAddCamera}>
                         <span className="icon">+</span> Add Camera
                     </button>
                 </div>
@@ -110,13 +138,13 @@ const CamViewer = () => {
                         </div>
                         <div className="expanded-controls">
                             <button className="expanded-control-btn">
-                                <span className="icon">👤</span> Track Person
+                                <UserCheck size={18} /> Track Person
                             </button>
                             <button className="expanded-control-btn">
-                                <span className="icon">📷</span> Screenshot
+                                <Camera2 size={18} /> Screenshot
                             </button>
                             <button className="expanded-control-btn">
-                                <span className="icon">⚙️</span> Settings
+                                <Settings size={18} /> Settings
                             </button>
                         </div>
                     </div>
