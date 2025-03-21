@@ -25,3 +25,5 @@ dist-ssr
 
 *.json
 yolov8n.pt
+
+test2.py
