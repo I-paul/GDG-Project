@@ -1,48 +1,155 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import ScrollTrigger from 'gsap/ScrollTrigger';
+import { AlertCircle, CheckCircle, Camera, Edit, X } from 'lucide-react';
 import './styling/addcam.css';
 
 const AddCam = () => {
     const addCamRef = useRef(null);
     const formRef = useRef(null);
     const cameraListRef = useRef(null);
-    gsap.registerPlugin(useGSAP, ScrollTrigger)
+    const viewSectionRef = useRef(null);
+    
+    // State for camera management
+    const [cameras, setCameras] = useState([
+        { id: 1, name: "Front Door Camera", status: "Online", ip: "192.168.1.101", port: "8080", username: "admin", location: "Front Door" },
+        { id: 2, name: "Back Yard Camera", status: "Offline", ip: "192.168.1.102", port: "8080", username: "admin", location: "Back Yard" },
+        { id: 3, name: "Living Room Camera", status: "Online", ip: "192.168.1.103", port: "8080", username: "admin", location: "Living Room" },
+        { id: 4, name: "Garage Camera", status: "Online", ip: "192.168.1.104", port: "8080", username: "admin", location: "Garage" },
+        { id: 5, name: "Side Gate Camera", status: "Offline", ip: "192.168.1.105", port: "8080", username: "admin", location: "Side Gate" }
+    ]);
+    
+    // State for the camera being viewed
+    const [selectedCamera, setSelectedCamera] = useState(null);
+    
+    // State for new camera form
+    const [newCamera, setNewCamera] = useState({
+        name: "",
+        ip: "",
+        port: "",
+        username: "",
+        password: "",
+        location: ""
+    });
+    
+    // Initialize GSAP
+    gsap.registerPlugin(useGSAP, ScrollTrigger);
+    
     useGSAP(() => {
-
-
-        gsap.fromTo(cameraListRef.current,{ opacity: 0}, {
+        gsap.fromTo(cameraListRef.current, { opacity: 0 }, {
             opacity: 1,
             duration: 2,
             ease: "power3.out",
-            scrollTrigger:{trigger:addCamRef.current,
+            scrollTrigger: {
+                trigger: addCamRef.current,
                 start: 'top 35%', 
                 end: '+=500', 
-                scrub: 1, toggleActions : 'restart pause reverse reverse'},
+                scrub: 1, 
+                toggleActions: 'restart pause reverse reverse'
+            },
             delay: 0.4
         });
-        gsap.fromTo(formRef.current,{opacity:0}, {
+        
+        gsap.fromTo(formRef.current, { opacity: 0 }, {
             opacity: 1,
             duration: 2,
             ease: "power3.out",
-            scrollTrigger:{trigger:addCamRef.current,
+            scrollTrigger: {
+                trigger: addCamRef.current,
                 start: 'top 35%', 
                 end: '+=500', 
-                scrub: 1, toggleActions : 'restart pause reverse reverse'},
+                scrub: 1, 
+                toggleActions: 'restart pause reverse reverse'
+            },
             delay: 0.4
         });
-    }, { scope: addCamRef });
-    const cameras = [
-        { id: 1, name: "Front Door Camera", status: "Online" },
-        { id: 2, name: "Back Yard Camera", status: "Offline" },
-        { id: 3, name: "Living Room Camera", status: "Online" },
-        { id: 4, name: "Garage Camera", status: "Online" },
-        { id: 5, name: "Side Gate Camera", status: "Offline" }
-    ];
+        
+        if (viewSectionRef.current) {
+            gsap.fromTo(viewSectionRef.current, { opacity: 0 }, {
+                opacity: 1,
+                duration: 2,
+                ease: "power3.out",
+                scrollTrigger: {
+                    trigger: viewSectionRef.current,
+                    start: 'top 80%',
+                    toggleActions: 'play none none reverse'
+                }
+            });
+        }
+    }, { scope: addCamRef, dependencies: [selectedCamera] });
+
+    // Handle form input changes
+    const handleInputChange = (e) => {
+        const { id, value } = e.target;
+        setNewCamera({
+            ...newCamera,
+            [id.replace('camera', '').toLowerCase()]: value
+        });
+    };
+
+    // Handle form submission
+    const handleFormSubmit = (e) => {
+        e.preventDefault();
+        
+        // Create new camera object
+        const newCameraObj = {
+            id: cameras.length + 1,
+            name: newCamera.name,
+            status: "Online", // Default status
+            ip: newCamera.ip,
+            port: newCamera.port,
+            username: newCamera.username,
+            location: newCamera.location
+        };
+        
+        // Add to cameras array
+        setCameras([...cameras, newCameraObj]);
+        
+        // Reset form
+        setNewCamera({
+            name: "",
+            ip: "",
+            port: "",
+            username: "",
+            password: "",
+            location: ""
+        });
+        
+        // Success animation
+        const formElement = formRef.current;
+        gsap.to(formElement, {
+            borderColor: "var(--purple)",
+            boxShadow: "0 0 20px var(--purple-transparent)",
+            duration: 0.3,
+            onComplete: () => {
+                gsap.to(formElement, {
+                    borderColor: "rgba(255, 105, 180, 0.2)",
+                    boxShadow: "0 8px 32px rgba(255, 105, 180, 0.1)",
+                    duration: 0.5,
+                    delay: 1
+                });
+            }
+        });
+    };
+
+    // View camera function
+    const handleViewCamera = (camera) => {
+        setSelectedCamera(camera);
+        
+        // Scroll to view section
+        setTimeout(() => {
+            viewSectionRef.current.scrollIntoView({ behavior: 'smooth' });
+        }, 100);
+    };
+
+    // Close camera view
+    const handleCloseView = () => {
+        setSelectedCamera(null);
+    };
 
     return (
-        <section id='monitor' ref={addCamRef}  className='monitor-sec' >
+        <section id='monitor' ref={addCamRef} className='monitor-sec'>
             <div className="monitor-container">
                 <h2 className="section-title">Camera <span className="highlight">Management</span></h2>
                 
@@ -58,50 +165,150 @@ const AddCam = () => {
                                         <span className="status-text">{camera.status}</span>
                                     </div>
                                     <div className="camera-actions">
-                                        <button className="view-btn">View</button>
-                                        <button className="edit-btn">Edit</button>
+                                        <button className="edit-btn">
+                                            <Edit size={16} />
+                                        </button>
                                     </div>
                                 </div>
                             ))}
+                        </div>
+                        
+                        <div className="view-all-section">
+                            <button 
+                                className="view-all-btn"
+                                onClick={() => handleViewCamera(cameras.find(cam => cam.status === "Online"))}
+                                disabled={!cameras.some(cam => cam.status === "Online")}
+                            >
+                                <Camera size={18} />
+                                View Cameras
+                            </button>
                         </div>
                     </div>
                     
                     <div className="add-camera-form" ref={formRef}>
                         <h3>Add New Camera</h3>
-                        <form>
+                        <form onSubmit={handleFormSubmit}>
                             <div className="form-group">
                                 <label htmlFor="cameraName">Camera Name</label>
-                                <input type="text" id="cameraName" placeholder="Enter camera name" />
+                                <input 
+                                    type="text" 
+                                    id="cameraName" 
+                                    placeholder="Enter camera name"
+                                    value={newCamera.name}
+                                    onChange={handleInputChange}
+                                    required
+                                />
                             </div>
                             
                             <div className="form-group">
                                 <label htmlFor="cameraIP">IP Address</label>
-                                <input type="text" id="cameraIP" placeholder="192.168.1.100" />
+                                <input 
+                                    type="text" 
+                                    id="cameraIP" 
+                                    placeholder="192.168.1.100"
+                                    value={newCamera.ip}
+                                    onChange={handleInputChange}
+                                    required
+                                    pattern="^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"
+                                    title="Please enter a valid IP address"
+                                />
                             </div>
                             
                             <div className="form-group">
                                 <label htmlFor="cameraPort">Port</label>
-                                <input type="text" id="cameraPort" placeholder="8080" />
+                                <input 
+                                    type="text" 
+                                    id="cameraPort" 
+                                    placeholder="8080"
+                                    value={newCamera.port}
+                                    onChange={handleInputChange}
+                                    required
+                                    pattern="^[0-9]{1,5}$"
+                                    title="Please enter a valid port number"
+                                />
                             </div>
                             
                             <div className="form-group">
                                 <label htmlFor="cameraUsername">Username</label>
-                                <input type="text" id="cameraUsername" placeholder="admin" />
+                                <input 
+                                    type="text" 
+                                    id="cameraUsername" 
+                                    placeholder="admin"
+                                    value={newCamera.username}
+                                    onChange={handleInputChange}
+                                    required
+                                />
                             </div>
                             
                             <div className="form-group">
                                 <label htmlFor="cameraPassword">Password</label>
-                                <input type="password" id="cameraPassword" placeholder="••••••••" />
+                                <input 
+                                    type="password" 
+                                    id="cameraPassword" 
+                                    placeholder="••••••••"
+                                    value={newCamera.password}
+                                    onChange={handleInputChange}
+                                    required
+                                />
                             </div>
                             
                             <div className="form-group">
                                 <label htmlFor="cameraLocation">Location</label>
-                                <input type="text" id="cameraLocation" placeholder="Front Door" />
+                                <input 
+                                    type="text" 
+                                    id="cameraLocation" 
+                                    placeholder="Front Door"
+                                    value={newCamera.location}
+                                    onChange={handleInputChange}
+                                    required
+                                />
                             </div>
                             
-                            <button type="submit" className="primary-btn">Add Camera</button>
+                            <button type="submit" className="primary-btn">
+                                <CheckCircle size={18} className="btn-icon" />
+                                Add Camera
+                            </button>
                         </form>
                     </div>
+                </div>
+                
+                {/* Camera View Section */}
+                <div className={`camera-view-section ${selectedCamera ? 'active' : ''}`} ref={viewSectionRef}>
+                    {selectedCamera ? (
+                        <>
+                            <div className="view-header">
+                                <h3>Live View: {selectedCamera.name}</h3>
+                                <button className="close-view-btn" onClick={handleCloseView}>
+                                    <X size={20} />
+                                </button>
+                            </div>
+                            <div className="camera-feed">
+                                {/* Placeholder for camera feed */}
+                                <div className="camera-placeholder">
+                                    <Camera size={48} />
+                                    <p>Camera feed would display here ({selectedCamera.location})</p>
+                                    <div className="camera-details">
+                                        <span>IP: {selectedCamera.ip}</span>
+                                        <span>Port: {selectedCamera.port}</span>
+                                        <span>Status: {selectedCamera.status}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="camera-controls">
+                                <button className="control-btn">Pan Left</button>
+                                <button className="control-btn">Pan Right</button>
+                                <button className="control-btn">Tilt Up</button>
+                                <button className="control-btn">Tilt Down</button>
+                                <button className="control-btn zoom-in">Zoom In</button>
+                                <button className="control-btn zoom-out">Zoom Out</button>
+                            </div>
+                        </>
+                    ) : (
+                        <div className="no-camera-selected">
+                            <AlertCircle size={48} />
+                            <p>No camera selected. Please click "View Cameras" to start monitoring.</p>
+                        </div>
+                    )}
                 </div>
             </div>
         </section>

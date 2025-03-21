@@ -211,6 +211,199 @@
     box-shadow: 0 4px 12px var(--pink-transparent);
 }
 
+/* Camera View Section Styles */
+.camera-view-section {
+    margin-top: 3rem;
+    background: rgba(30, 30, 30, 0.8);
+    border-radius: 10px;
+    padding: 1.5rem;
+    box-shadow: 0 8px 32px rgba(138, 43, 226, 0.1);
+    border: 1px solid rgba(138, 43, 226, 0.2);
+    opacity: 0;
+    height: 0;
+    overflow: hidden;
+    transition: all 0.5s ease;
+}
+
+.camera-view-section.active {
+    opacity: 1;
+    height: auto;
+    overflow: visible;
+}
+
+.view-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.view-header h3 {
+    font-size: 1.5rem;
+    color: var(--light-purple);
+}
+
+.close-view-btn {
+    background: transparent;
+    border: none;
+    color: #a0a0a0;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.close-view-btn:hover {
+    color: var(--pink);
+    transform: rotate(90deg);
+}
+
+.camera-feed {
+    width: 100%;
+    height: 400px;
+    background: #1a1a1a;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 1.5rem;
+}
+
+.camera-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    color: #a0a0a0;
+    border: 2px dashed #333;
+    border-radius: 8px;
+}
+
+.camera-placeholder svg {
+    margin-bottom: 1rem;
+    color: var(--purple);
+}
+
+.camera-details {
+    margin-top: 1rem;
+    display: flex;
+    gap: 1rem;
+}
+
+.camera-details span {
+    background: rgba(138, 43, 226, 0.2);
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-size: 0.85rem;
+}
+
+.camera-controls {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+}
+
+.control-btn {
+    padding: 0.75rem 1rem;
+    background: #1e1e1e;
+    border: 1px solid #333;
+    border-radius: 6px;
+    color: white;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.control-btn:hover {
+    background: var(--purple-transparent);
+    border-color: var(--purple);
+}
+
+.zoom-in {
+    background: var(--purple-to-pink-gradient);
+}
+
+.zoom-out {
+    background: var(--dark-purple);
+}
+
+.no-camera-selected {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem 0;
+    color: #a0a0a0;
+}
+
+.no-camera-selected svg {
+    margin-bottom: 1rem;
+    color: var(--pink);
+}
+
+/* View All Section styles */
+.view-all-section {
+    margin-top: 1.5rem;
+    text-align: center;
+}
+
+.view-all-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    padding: 0.75rem 1.5rem;
+    background: var(--button-gradient);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    gap: 0.5rem;
+}
+
+.view-all-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px var(--pink-transparent);
+}
+
+.view-all-btn:disabled {
+    background: #333;
+    cursor: not-allowed;
+    opacity: 0.7;
+    transform: none;
+    box-shadow: none;
+}
+
+/* Button icon styling */
+.btn-icon {
+    margin-right: 0.5rem;
+}
+
+/* Additional responsive adjustments */
+@media (max-width: 768px) {
+    .camera-controls {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .zoom-in, .zoom-out {
+        grid-column: span 1;
+    }
+}
+
+@media (max-width: 576px) {
+    .camera-feed {
+        height: 300px;
+    }
+    
+    .camera-details {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .camera-controls {
+        grid-template-columns: 1fr;
+    }
+}
 /* Responsive styles */
 @media (max-width: 992px) {
     .monitor-content {

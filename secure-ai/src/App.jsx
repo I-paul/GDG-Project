@@ -6,6 +6,7 @@ import Navbar from "./components/navbar";
 import Hero from "./components/hero";
 import AddCam from "./components/addcam";
 import Contact from "./components/contact";
+// import background from './assets/background.webm';
 import "./App.css";
 
 gsap.registerPlugin(ScrollTrigger);
@@ -15,53 +16,9 @@ const App = () => {
   const heroRef = useRef();
   const addCamRef = useRef();
   const contactRef = useRef();
-  const videoRef = useRef();
-  const [videoLoaded, setVideoLoaded] = useState(false);
 
-  // Load video and prepare it for scroll control
-  useEffect(() => {
-    const video = videoRef.current;
-    
-    // Set video to be ready for scrubbing
-    video.addEventListener('loadedmetadata', () => {
-      video.pause();
-      video.currentTime = 0;
-      setVideoLoaded(true);
-    });
-    
-    // Handle errors
-    video.addEventListener('error', () => {
-      console.error('Error loading video');
-    });
-    
-    return () => {
-      video.removeEventListener('loadedmetadata', () => {});
-      video.removeEventListener('error', () => {});
-    };
-  }, []);
 
   useGSAP(() => {
-    if (!videoLoaded) return;
-    
-    // Create a timeline for the entire page scroll
-    const tl = gsap.timeline({
-      scrollTrigger: {
-        trigger: containerRef.current,
-        start: "top top",
-        end: "bottom bottom",
-        scrub: 1.5, // Smooth scrubbing effect
-        onUpdate: (self) => {
-          const video = videoRef.current;
-          if (video) {
-            // Map scroll progress (0-1) to video duration
-            const newTime = self.progress * video.duration;
-            if (Math.abs(video.currentTime - newTime) > 0.01) {
-              video.currentTime = newTime;
-            }
-          }
-        }
-      }
-    });
 
     // Hero section animation
     gsap.fromTo(
@@ -71,6 +28,7 @@ const App = () => {
         y: "-100%",
         opacity: 0,
         ease: "power2.out",
+        zIndex: 1,
         scrollTrigger: {
           trigger: addCamRef.current,
           start: "top bottom",
@@ -90,6 +48,7 @@ const App = () => {
         y: "0vh",
         opacity: 1,
         ease: "power2.out",
+        zIndex:3,
         scrollTrigger: {
           trigger: addCamRef.current,
           start: "top bottom",
@@ -120,21 +79,10 @@ const App = () => {
       }
     );
     
-  }, { scope: containerRef, dependencies: [videoLoaded] });
+  }, { scope: containerRef });
 
   return (
     <div className="app-container" ref={containerRef}>
-      {/* Video Background */}
-      <div className="video-background">
-        <video 
-          ref={videoRef}
-          muted
-          playsInline
-          preload="auto"
-          src="/path/to/your/background-animation.mp4"
-        />
-      </div>
-      
       <Navbar />
       <Hero ref={heroRef} />
       <AddCam ref={addCamRef} />
