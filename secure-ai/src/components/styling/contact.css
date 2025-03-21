@@ -1,0 +1,221 @@
+/* Contact Section Styles */
+
+#contact {
+    min-height: 100vh;
+    padding: 6rem 2rem;
+    background: linear-gradient(136deg, rgba(146,99,167,1) 0%, rgba(153,132,172,1) 50%, rgba(137,59,161,1) 100%);
+    width: 100%;
+}
+
+.contact-container {
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.contact-content {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 4rem;
+}
+
+/* Contact Info styles */
+.contact-info {
+    width: 100%;
+    max-width: 600px;
+    background: rgba(30, 30, 30, 0.8);
+    border-radius: 10px;
+    padding: 2rem;
+    box-shadow: 0 8px 32px rgba(138, 43, 226, 0.1);
+    border: 1px solid rgba(138, 43, 226, 0.2);
+    text-align: center;
+}
+
+.contact-info h3 {
+    font-size: 1.8rem;
+    margin-bottom: 2rem;
+    color: var(--light-purple);
+}
+
+.info-item {
+    display: flex;
+    margin-bottom: 2rem;
+    align-items: center;
+    justify-content: center;
+}
+
+.info-icon {
+    width: 50px;
+    height: 50px;
+    background: var(--purple-transparent);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    margin-right: 1.5rem;
+    flex-shrink: 0;
+}
+
+.info-content h4 {
+    font-size: 1.3rem;
+    margin-bottom: 0.5rem;
+    color: var(--yellow);
+}
+
+.info-content p {
+    font-size: 1.1rem;
+    color: #e0e0e0;
+    margin-bottom: 0.5rem;
+}
+
+.social-links {
+    display: flex;
+    gap: 1.5rem;
+    margin-top: 2rem;
+    justify-content: center;
+}
+
+.social-link {
+    width: 50px;
+    height: 50px;
+    background: var(--purple-to-pink-gradient);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    text-decoration: none;
+    transition: all 0.3s ease;
+}
+
+.social-link:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 16px rgba(255, 105, 180, 0.3);
+}
+
+/* Creators section */
+.creators-section {
+    margin: 4rem 0;
+    text-align: center;
+}
+
+.creators-section h3 {
+    font-size: 1.8rem;
+    margin-bottom: 2rem;
+    color: var(--pink);
+}
+
+.creators-container {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 2rem;
+}
+
+.creator {
+    background: rgba(30, 30, 30, 0.8);
+    border-radius: 10px;
+    padding: 1.5rem;
+    min-width: 250px;
+    flex: 1;
+    max-width: 350px;
+    box-shadow: 0 8px 32px rgba(255, 105, 180, 0.1);
+    border: 1px solid rgba(255, 105, 180, 0.2);
+}
+
+.creator h4 {
+    font-size: 1.3rem;
+    margin-bottom: 0.5rem;
+    color: white;
+}
+
+.creator p {
+    color: var(--yellow);
+    font-size: 1rem;
+    margin-bottom: 1rem;
+}
+
+.creator-socials {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+}
+
+.creator-socials .social-link {
+    width: 40px;
+    height: 40px;
+}
+
+/* Copyright section */
+.copyright {
+    padding-top: 2rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.copyright p {
+    color: #a0a0a0;
+    font-size: 0.9rem;
+}
+
+.footer-links {
+    display: flex;
+    gap: 1.5rem;
+}
+
+.footer-links a {
+    color: #a0a0a0;
+    text-decoration: none;
+    font-size: 0.9rem;
+    transition: color 0.3s ease;
+}
+
+.footer-links a:hover {
+    color: var(--pink);
+}
+
+/* Responsive styles */
+@media (max-width: 992px) {
+    .creators-container {
+        flex-direction: column;
+        align-items: center;
+    }
+    
+    .creator {
+        width: 100%;
+        max-width: 400px;
+    }
+    
+    .copyright {
+        flex-direction: column;
+        text-align: center;
+    }
+    
+    .footer-links {
+        justify-content: center;
+    }
+}
+
+@media (max-width: 576px) {
+    #contact {
+        padding: 4rem 1rem;
+    }
+    
+    .social-links {
+        gap: 1rem;
+    }
+    
+    .social-link {
+        width: 40px;
+        height: 40px;
+    }
+    
+    .info-icon {
+        width: 40px;
+        height: 40px;
+    }
+}

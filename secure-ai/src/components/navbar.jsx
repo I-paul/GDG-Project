@@ -12,8 +12,8 @@ const Navbar = () => {
     
     useGSAP(() => {
         gsap.fromTo(nav.current, 
-            {y: '-100%', ease: 'power3.out'}, 
-            {duration: 1.3, y: '0', ease: 'bounce'});
+            {y: '-100%', ease: 'bounce'}, 
+            {duration: 1.3, y: '0'});
     });
 
     useEffect(() => {

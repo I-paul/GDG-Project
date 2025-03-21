@@ -4,11 +4,8 @@
     min-height: 100vh;
     padding: 6rem 2rem;
     background-color: #121212;
-    top: 0;
-    right: -100%;    
     width: 100%;
-    z-index: 2; 
-  }
+}
 
 .monitor-container {
     max-width: 1400px;

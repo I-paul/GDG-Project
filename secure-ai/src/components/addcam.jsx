@@ -1,33 +1,38 @@
 import React, { useRef } from 'react';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
+import ScrollTrigger from 'gsap/ScrollTrigger';
 import './styling/addcam.css';
 
 const AddCam = () => {
     const addCamRef = useRef(null);
     const formRef = useRef(null);
     const cameraListRef = useRef(null);
-
+    gsap.registerPlugin(useGSAP, ScrollTrigger)
     useGSAP(() => {
-        // Initial animation for camera list
-        gsap.from(cameraListRef.current, {
-            opacity: 0,
-            x: -30,
-            duration: 0.8,
-            ease: "power3.out"
-        });
 
-        // Initial animation for form
-        gsap.from(formRef.current, {
-            opacity: 0,
-            x: 30,
-            duration: 0.8,
+
+        gsap.fromTo(cameraListRef.current,{ opacity: 0}, {
+            opacity: 1,
+            duration: 2,
             ease: "power3.out",
-            delay: 0.2
+            scrollTrigger:{trigger:addCamRef.current,
+                start: 'top 35%', 
+                end: '+=500', 
+                scrub: 1, toggleActions : 'restart pause reverse reverse'},
+            delay: 0.4
+        });
+        gsap.fromTo(formRef.current,{opacity:0}, {
+            opacity: 1,
+            duration: 2,
+            ease: "power3.out",
+            scrollTrigger:{trigger:addCamRef.current,
+                start: 'top 35%', 
+                end: '+=500', 
+                scrub: 1, toggleActions : 'restart pause reverse reverse'},
+            delay: 0.4
         });
     }, { scope: addCamRef });
-
-    // Sample camera data - in a real app, this would come from props or state
     const cameras = [
         { id: 1, name: "Front Door Camera", status: "Online" },
         { id: 2, name: "Back Yard Camera", status: "Offline" },
@@ -37,7 +42,7 @@ const AddCam = () => {
     ];
 
     return (
-        <section id='monitor' ref={addCamRef}>
+        <section id='monitor' ref={addCamRef}  className='monitor-sec' >
             <div className="monitor-container">
                 <h2 className="section-title">Camera <span className="highlight">Management</span></h2>
                 
