@@ -84,14 +84,14 @@ const Contact = () => {
                             </div>
                         </div>
                         
-                        {/* <div className="creator">
-                            <h4>Michael Chen</h4>
-                            <p>AI Specialist</p>
+                        <div className="creator">
+                            <h4>Diviyan Frank Jeyasingh</h4>
+                            <p>Web Developer</p>
                             <div className="creator-socials">
                                 <a href="#" className="social-link"><Github size={20} /></a>
                                 <a href="#" className="social-link"><Linkedin size={20} /></a>
                             </div>
-                        </div> */}
+                        </div>
                     </div>
                 </div>
                 
