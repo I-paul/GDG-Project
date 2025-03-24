@@ -18,81 +18,81 @@ const App = () => {
   const addCamRef = useRef(null);
   const contactRef = useRef(null);
 
-  useGSAP(() => {
-    // Safely check if all refs are defined
-    const allRefsExist = 
-      containerRef.current && 
-      heroRef.current && 
-      addCamRef.current && 
-      contactRef.current;
+  // useGSAP(() => {
+  //   // Safely check if all refs are defined
+  //   const allRefsExist = 
+  //     containerRef.current && 
+  //     heroRef.current && 
+  //     addCamRef.current && 
+  //     contactRef.current;
       
-    if (!allRefsExist) {
-      console.warn("Some refs are undefined. Skipping GSAP animations.");
-      return;
-    }
+  //   if (!allRefsExist) {
+  //     console.warn("Some refs are undefined. Skipping GSAP animations.");
+  //     return;
+  //   }
     
-    // Basic section animations - simplified for stability
+  //   // Basic section animations - simplified for stability
     
-    // Hero section
-    ScrollTrigger.create({
-      trigger: heroRef.current,
-      start: "top top",
-      end: "bottom top",
-      pin: true,
-      pinSpacing: false
-    });
+  //   // Hero section
+  //   ScrollTrigger.create({
+  //     trigger: heroRef.current,
+  //     start: "top top",
+  //     end: "bottom top",
+  //     pin: true,
+  //     pinSpacing: false
+  //   });
     
-    // AddCam section
-    gsap.set(addCamRef.current, { y: "100vh" });
+  //   // AddCam section
+  //   gsap.set(addCamRef.current, { y: "100vh" });
     
-    ScrollTrigger.create({
-      trigger: addCamRef.current,
-      start: "top bottom",
-      end: "top top",
-      onEnter: () => {
-        gsap.to(addCamRef.current, {
-          y: "0vh",
-          duration: 0.8,
-          ease: "power2.out"
-        });
-      },
-      onLeaveBack: () => {
-        gsap.to(addCamRef.current, {
-          y: "100vh",
-          duration: 0.8,
-          ease: "power2.in"
-        });
-      },
-      pin: true,
-      pinSpacing: false
-    });
+  //   ScrollTrigger.create({
+  //     trigger: addCamRef.current,
+  //     start: "top bottom",
+  //     end: "top top",
+  //     onEnter: () => {
+  //       gsap.to(addCamRef.current, {
+  //         y: "0vh",
+  //         duration: 0.8,
+  //         ease: "power2.out"
+  //       });
+  //     },
+  //     onLeaveBack: () => {
+  //       gsap.to(addCamRef.current, {
+  //         y: "100vh",
+  //         duration: 0.8,
+  //         ease: "power2.in"
+  //       });
+  //     },
+  //     pin: true,
+  //     pinSpacing: false
+  //   });
     
-    // Contact section
-    gsap.set(contactRef.current, { y: "100vh" });
+  //   // Contact section
+  //   gsap.set(contactRef.current, { y: "100vh" });
     
-    ScrollTrigger.create({
-      trigger: contactRef.current,
-      start: "top bottom",
-      end: "top top",
-      onEnter: () => {
-        gsap.to(contactRef.current, {
-          y: "0vh",
-          duration: 0.8,
-          ease: "power2.out"
-        });
-      },
-      onLeaveBack: () => {
-        gsap.to(contactRef.current, {
-          y: "100vh",
-          duration: 0.8,
-          ease: "power2.in"
-        });
-      },
-      pin: true,
-      pinSpacing: false
-    });
+  //   ScrollTrigger.create({
+  //     trigger: contactRef.current,
+  //     start: "top bottom",
+  //     end: "top top",
+  //     onEnter: () => {
+  //       gsap.to(contactRef.current, {
+  //         y: "0vh",
+  //         duration: 0.8,
+  //         ease: "power2.out"
+  //       });
+  //     },
+  //     onLeaveBack: () => {
+  //       gsap.to(contactRef.current, {
+  //         y: "100vh",
+  //         duration: 0.8,
+  //         ease: "power2.in"
+  //       });
+  //     },
+  //     pin: true,
+  //     pinSpacing: false
+  //   });
     
-  }, { scope: containerRef, dependencies: [containerRef, heroRef, addCamRef, contactRef] });
+  // }, { scope: containerRef, dependencies: [containerRef, heroRef, addCamRef, contactRef] });
 
   return (
     <div className="app-container" ref={containerRef}>

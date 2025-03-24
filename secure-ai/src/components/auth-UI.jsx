@@ -8,8 +8,31 @@ import {
   signInWithPopup, 
   sendPasswordResetEmail 
 } from "firebase/auth";
-import { auth } from "../firebase";
+import { auth, db } from "../firebase";
+import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import '../components/styling/auth.css';
+
+// Validation helpers
+const validateEmail = (email) => {
+  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailPattern.test(email);
+};
+
+const validatePassword = (password) => {
+  // At least 6 characters, containing at least one number
+  return password.length >= 6 && /\d/.test(password);
+};
+
+// Error message constants
+const ERROR_MESSAGES = {
+  INVALID_EMAIL: "Please enter a valid email address.",
+  PASSWORD_REQUIREMENTS: "Password must be at least 6 characters and contain a number.",
+  EMAIL_REQUIRED: "Please enter your email address.",
+  GENERAL_ERROR: "Authentication error. Please try again.",
+  USER_NOT_FOUND: "Account not found. Please check your email or sign up.",
+  WRONG_PASSWORD: "Incorrect password. Please try again.",
+  EMAIL_IN_USE: "This email is already in use. Try logging in instead.",
+};
 
 const LoginSignupPage = () => {
   const navigate = useNavigate();
@@ -27,62 +50,177 @@ const LoginSignupPage = () => {
   const googleProvider = new GoogleAuthProvider();
   
   useEffect(() => {
-    // Animate form in
-    if (formRef.current) {
-      gsap.fromTo(
-        formRef.current,
-        { y: 50, opacity: 0 },
-        { y: 0, opacity: 1, duration: 0.5, ease: "power2.out" }
-      );
-    }
+    // Ensure form element exists before animating
+    const animateForm = () => {
+      if (formRef.current) {
+        gsap.fromTo(
+          formRef.current,
+          { y: 50, opacity: 0 },
+          { y: 0, opacity: 1, duration: 0.5, ease: "power2.out" }
+        );
+      }
+    };
+    
+    // Small delay to ensure DOM is ready
+    const timer = setTimeout(animateForm, 100);
+    return () => clearTimeout(timer);
   }, []);
   
   useEffect(() => {
-    // Animate form content when switching between login and signup
-    if (formContentRef.current) {
+    // Ensure form content element exists before animating
+    const animateFormContent = () => {
+      if (formContentRef.current) {
+        gsap.fromTo(
+          formContentRef.current,
+          { y: 20, opacity: 0 },
+          { y: 0, opacity: 1, duration: 0.4, ease: "power2.out" }
+        );
+      }
+    };
+    
+    // Small delay to ensure DOM is ready
+    const timer = setTimeout(animateFormContent, 100);
+    return () => clearTimeout(timer);
+  }, [isLogin]);
+
+  // Function to create/update a user document in Firestore
+  const updateUserDocument = async (userId, userEmail) => {
+    try {
+      // Reference to the user document
+      const userDocRef = doc(db, "Users", userId);
+      const userDoc = await getDoc(userDocRef);
+      
+      // Base user data
+      const userData = {
+        email: userEmail,
+        last_login: serverTimestamp()
+      };
+      
+      if (!userDoc.exists()) {
+        // New user - create complete document
+        await setDoc(userDocRef, {
+          ...userData,
+          connected_cameras: [],
+          created_at: serverTimestamp(),
+          display_name: userEmail.split('@')[0], // Default display name from email
+          notifications_enabled: true,
+          role: 'user',
+          account_status: 'active'
+        });
+        console.log("New user document created");
+      } else {
+        // Existing user - just update login time
+        await setDoc(userDocRef, userData, { merge: true });
+        console.log("User document updated");
+      }
+      
+      return true;
+    } catch (error) {
+      console.error("Error managing user document:", error);
+      return false;
+    }
+  };
+  
+  const validateForm = () => {
+    // Clear previous errors
+    setError("");
+    
+    // Validate email
+    if (!validateEmail(email)) {
+      setError(ERROR_MESSAGES.INVALID_EMAIL);
+      highlightField('email');
+      return false;
+    }
+    
+    // Validate password for sign up
+    if (!isLogin && !validatePassword(password)) {
+      setError(ERROR_MESSAGES.PASSWORD_REQUIREMENTS);
+      highlightField('password');
+      return false;
+    }
+    
+    return true;
+  };
+  
+  const highlightField = (fieldId) => {
+    const field = document.getElementById(fieldId);
+    if (field) {
       gsap.fromTo(
-        formContentRef.current,
-        { y: 20, opacity: 0 },
-        { y: 0, opacity: 1, duration: 0.4, ease: "power2.out" }
+        field,
+        { borderColor: "#ff6b6b" },
+        { 
+          borderColor: "rgba(255, 255, 255, 0.1)", 
+          duration: 1,
+          ease: "power2.inOut"
+        }
       );
     }
-  }, [isLogin]);
+  };
   
+  const handleAuthError = (error) => {
+    console.error("Auth error:", error.code);
+    
+    // Map Firebase error codes to user-friendly messages
+    switch (error.code) {
+      case 'auth/user-not-found':
+        return ERROR_MESSAGES.USER_NOT_FOUND;
+      case 'auth/wrong-password':
+        return ERROR_MESSAGES.WRONG_PASSWORD;
+      case 'auth/email-already-in-use':
+        return ERROR_MESSAGES.EMAIL_IN_USE;
+      default:
+        return error.message || ERROR_MESSAGES.GENERAL_ERROR;
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError("");
+    
+    if (!validateForm()) {
+      return;
+    }
+    
     setLoading(true);
     
     try {
+      let userCredential;
+      
       if (isLogin) {
         // Login logic
-        await signInWithEmailAndPassword(auth, email, password);
+        userCredential = await signInWithEmailAndPassword(auth, email, password);
       } else {
         // Sign up logic
-        await createUserWithEmailAndPassword(auth, email, password);
+        userCredential = await createUserWithEmailAndPassword(auth, email, password);
       }
       
-      // Successful login/signup animation
-      if (formRef.current) {
-        gsap.to(formRef.current, {
-          scale: 1.05,
-          duration: 0.2,
-          ease: "power1.out",
-          onComplete: () => {
-            gsap.to(formRef.current, {
-              scale: 1,
-              duration: 0.3,
-              ease: "elastic.out(1, 0.5)",
-              onComplete: () => {
-                // Navigate back to home page
-                navigate('/');
-              }
-            });
-          }
-        });
+      // Update Firestore user document
+      const success = await updateUserDocument(userCredential.user.uid, userCredential.user.email);
+      
+      if (success) {
+        // Successful login/signup animation
+        if (formRef.current) {
+          gsap.to(formRef.current, {
+            scale: 1.05,
+            duration: 0.2,
+            ease: "power1.out",
+            onComplete: () => {
+              gsap.to(formRef.current, {
+                scale: 1,
+                duration: 0.3,
+                ease: "elastic.out(1, 0.5)",
+                onComplete: () => {
+                  // Navigate back to home page
+                  navigate('/');
+                }
+              });
+            }
+          });
+        }
+      } else {
+        setError("Error updating user profile. Please try again.");
       }
     } catch (err) {
-      setError(err.message);
+      setError(handleAuthError(err));
       
       // Error animation
       if (formRef.current) {
@@ -100,11 +238,37 @@ const LoginSignupPage = () => {
   const handleGoogleSignIn = async () => {
     setError("");
     setLoading(true);
+    
     try {
-      await signInWithPopup(auth, googleProvider);
-      navigate('/');
+      // Google sign in
+      const result = await signInWithPopup(auth, googleProvider);
+      const user = result.user;
+      
+      // Update Firestore user document
+      const success = await updateUserDocument(user.uid, user.email);
+      
+      if (success) {
+        // Successful login animation
+        gsap.to(formRef.current, {
+          scale: 1.05,
+          duration: 0.2,
+          ease: "power1.out",
+          onComplete: () => {
+            gsap.to(formRef.current, {
+              scale: 1,
+              duration: 0.3,
+              ease: "elastic.out(1, 0.5)",
+              onComplete: () => {
+                navigate('/');
+              }
+            });
+          }
+        });
+      } else {
+        setError("Error updating user profile. Please try again.");
+      }
     } catch (err) {
-      setError(err.message);
+      setError(handleAuthError(err));
       
       if (formRef.current) {
         gsap.to(formRef.current, {
@@ -120,20 +284,60 @@ const LoginSignupPage = () => {
   
   const handleResetPassword = async () => {
     if (!email) {
-      setError("Please enter your email address");
+      setError(ERROR_MESSAGES.EMAIL_REQUIRED);
+      highlightField('email');
       return;
     }
+    
+    if (!validateEmail(email)) {
+      setError(ERROR_MESSAGES.INVALID_EMAIL);
+      highlightField('email');
+      return;
+    }
+    
+    setLoading(true);
     
     try {
       await sendPasswordResetEmail(auth, email);
       setResetSent(true);
+      setError("");
+      
+      // Success animation
+      const successMessage = document.querySelector('.auth-success');
+      if (successMessage) {
+        gsap.fromTo(
+          successMessage,
+          { opacity: 0, y: -10 },
+          { opacity: 1, y: 0, duration: 0.4 }
+        );
+      }
     } catch (err) {
-      setError(err.message);
+      setError(handleAuthError(err));
+      
+      // Error animation
+      if (formRef.current) {
+        gsap.to(formRef.current, {
+          x: [-5, 5, -5, 5, 0],
+          duration: 0.4,
+          ease: "power1.inOut"
+        });
+      }
+    } finally {
+      setLoading(false);
     }
   };
   
   const handleGoBack = () => {
-    navigate('/');
+    // Back button animation
+    gsap.to('.auth-form-wrapper', {
+      x: 20,
+      opacity: 0,
+      duration: 0.3,
+      ease: "power2.in",
+      onComplete: () => {
+        navigate('/');
+      }
+    });
   };
   
   return (
@@ -178,8 +382,12 @@ const LoginSignupPage = () => {
                 type="email"
                 id="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setError(""); // Clear errors on change
+                }}
                 required
+                autoComplete="email"
               />
             </div>
             
@@ -189,9 +397,18 @@ const LoginSignupPage = () => {
                 type="password"
                 id="password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setError(""); // Clear errors on change
+                }}
                 required
+                autoComplete={isLogin ? "current-password" : "new-password"}
               />
+              {!isLogin && (
+                <p className="password-hint">
+                  Must be at least 6 characters with at least one number.
+                </p>
+              )}
             </div>
             
             {isLogin && (
@@ -200,6 +417,7 @@ const LoginSignupPage = () => {
                   type="button" 
                   onClick={handleResetPassword}
                   className="auth-text-button"
+                  disabled={loading}
                 >
                   Forgot Password?
                 </button>
