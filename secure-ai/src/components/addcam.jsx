@@ -77,7 +77,7 @@ const AddCam = () => {
     const handleFormSubmit = (e) => {
         e.preventDefault();
         
-        // Create new camera object
+        // Create new camera object with additional properties required by camview.jsx
         const newCameraObj = {
             id: cameras.length + 1,
             name: newCamera.name,
@@ -85,7 +85,11 @@ const AddCam = () => {
             ip: newCamera.ip,
             port: newCamera.port,
             username: newCamera.username,
-            location: newCamera.location
+            location: newCamera.location,
+            // Add these required properties for camview.jsx
+            type: "external", // Set the camera type to 'external'
+            streamUrl: `http://${newCamera.ip}:${newCamera.port}/stream`, // Construct a stream URL from IP and port
+            streamFormat: "hls" // Default to HLS format which is common for IP cameras
         };
         
         // Add to cameras array
