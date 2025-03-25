@@ -1,3 +1,4 @@
+// src/App.jsx
 import React, { useRef, useEffect } from "react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
@@ -8,82 +9,99 @@ import AddCam from "./components/addcam";
 import Contact from "./components/contact";
 import "./App.css";
 
+// Register GSAP plugin
 gsap.registerPlugin(ScrollTrigger);
 
 const App = () => {
-  const containerRef = useRef();
-  const heroRef = useRef();
-  const addCamRef = useRef();
-  const contactRef = useRef();
+  const containerRef = useRef(null);
+  const heroRef = useRef(null);
+  const addCamRef = useRef(null);
+  const contactRef = useRef(null);
 
-  useGSAP(() => {
-    // Hero section animation
-    gsap.fromTo(
-      heroRef.current,
-      { y: "0%", opacity: 1 }, 
-      {
-        y: "-100%",
-        opacity: 0,
-        ease: "power2.out",
-        zIndex: 1,
-        scrollTrigger: {
-          trigger: addCamRef.current,
-          start: "top bottom",
-          end: "top top",
-          scrub: 1,
-          pin: true,
-          anticipatePin: 1,
-        },
-      }
-    );
-
-    // AddCam section animation
-    gsap.fromTo(
-      addCamRef.current,
-      { y: "100vh", opacity: 0 },
-      {
-        y: "0vh",
-        opacity: 1,
-        ease: "power2.out",
-        zIndex:3,
-        scrollTrigger: {
-          trigger: addCamRef.current,
-          start: "top bottom",
-          end: "top top",
-          scrub: 1,
-          pin: true,
-          anticipatePin: 1,
-        },
-      }
-    );
+  // useGSAP(() => {
+  //   // Safely check if all refs are defined
+  //   const allRefsExist = 
+  //     containerRef.current && 
+  //     heroRef.current && 
+  //     addCamRef.current && 
+  //     contactRef.current;
+      
+  //   if (!allRefsExist) {
+  //     console.warn("Some refs are undefined. Skipping GSAP animations.");
+  //     return;
+  //   }
     
-    // Contact section animation
-    gsap.fromTo(
-      contactRef.current,
-      { y: "100vh", opacity: 0 },
-      {
-        y: "0vh",
-        opacity: 1,
-        ease: "power2.out",
-        scrollTrigger: {
-          trigger: contactRef.current,
-          start: "top bottom",
-          end: "top top",
-          scrub: 1,
-          pin: true,
-          anticipatePin: 1,
-        },
-      }
-    );
+  //   // Basic section animations - simplified for stability
     
-  }, { scope: containerRef });
+  //   // Hero section
+  //   ScrollTrigger.create({
+  //     trigger: heroRef.current,
+  //     start: "top top",
+  //     end: "bottom top",
+  //     pin: true,
+  //     pinSpacing: false
+  //   });
+    
+  //   // AddCam section
+  //   gsap.set(addCamRef.current, { y: "100vh" });
+    
+  //   ScrollTrigger.create({
+  //     trigger: addCamRef.current,
+  //     start: "top bottom",
+  //     end: "top top",
+  //     onEnter: () => {
+  //       gsap.to(addCamRef.current, {
+  //         y: "0vh",
+  //         duration: 0.8,
+  //         ease: "power2.out"
+  //       });
+  //     },
+  //     onLeaveBack: () => {
+  //       gsap.to(addCamRef.current, {
+  //         y: "100vh",
+  //         duration: 0.8,
+  //         ease: "power2.in"
+  //       });
+  //     },
+  //     pin: true,
+  //     pinSpacing: false
+  //   });
+    
+  //   // Contact section
+  //   gsap.set(contactRef.current, { y: "100vh" });
+    
+  //   ScrollTrigger.create({
+  //     trigger: contactRef.current,
+  //     start: "top bottom",
+  //     end: "top top",
+  //     onEnter: () => {
+  //       gsap.to(contactRef.current, {
+  //         y: "0vh",
+  //         duration: 0.8,
+  //         ease: "power2.out"
+  //       });
+  //     },
+  //     onLeaveBack: () => {
+  //       gsap.to(contactRef.current, {
+  //         y: "100vh",
+  //         duration: 0.8,
+  //         ease: "power2.in"
+  //       });
+  //     },
+  //     pin: true,
+  //     pinSpacing: false
+  //   });
+    
+  // }, { scope: containerRef, dependencies: [containerRef, heroRef, addCamRef, contactRef] });
 
   return (
     <div className="app-container" ref={containerRef}>
       <Navbar />
-      <Hero ref={heroRef} />
-      <AddCam ref={addCamRef} />
-      <Contact ref={contactRef} />
+      <div>
+        <Hero ref={heroRef} />
+        <AddCam ref={addCamRef} />
+        <Contact ref={contactRef} />
+      </div>
     </div>
   );
 };

@@ -27,3 +27,5 @@ dist-ssr
 yolov8n.pt
 
 test2.py
+
+.env
