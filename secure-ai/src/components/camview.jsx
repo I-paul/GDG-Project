@@ -37,7 +37,7 @@ const CamViewer = () => {
                     status: 'Online', 
                     location: 'Front Door', 
                     type: 'external', 
-                    streamUrl: 'http://your-streaming-server.com/streams/front-door.m3u8',
+                    streamUrl: 'http://your-streaming-server.com/streams/back-door.m3u8',
                     streamFormat: 'hls'
                 },
                 { 

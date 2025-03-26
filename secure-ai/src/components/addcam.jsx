@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import ScrollTrigger from 'gsap/ScrollTrigger';
-import { AlertCircle, CheckCircle, Camera, Edit, Trash2 } from 'lucide-react';
+import { AlertCircle, CheckCircle, Camera, Edit, Trash2, Info } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../firebase';
 import { collection, addDoc, getDocs, deleteDoc, doc, getDoc, updateDoc, query, where } from 'firebase/firestore';
@@ -120,12 +120,10 @@ const AddCam = () => {
                     );
                     
                     const cameraDocs = await Promise.all(cameraPromises);
-                    const cameraData = cameraDocs
-                        .filter(doc => doc && doc.exists())
+                    const cameraData = cameraDocs.filter(doc => doc && doc.exists())
                         .map(doc => ({ 
                             id: doc.id, 
                             ...doc.data(),
-                            // Add properties for camview.jsx compatibility
                             type: "external",
                             streamUrl: `http://${doc.data().ip}:${doc.data().port}/stream`,
                             streamFormat: "hls"
@@ -154,6 +152,34 @@ const AddCam = () => {
             fetchCameras(userId);
         }
     }, [userId, fetchCameras]);
+
+    // Enhanced error handling with more informative tooltips
+    const renderErrorTooltip = () => {
+        return error ? (
+            <div className="error-tooltip">
+                <AlertCircle size={18} className="error-icon" />
+                <span className="error-text">{error}</span>
+                <div className="error-info-tooltip">
+                    <Info size={14} />
+                    <span className="tooltip-content">
+                        {error === ERROR_MESSAGES.NO_ACCESS 
+                            ? "This camera might be owned by another user or requires special permissions." 
+                            : "Please check your input and try again."}
+                    </span>
+                </div>
+            </div>
+        ) : null;
+    };
+
+    // Optional: Add camera status color mapping
+    const getCameraStatusColor = (status) => {
+        const statusColors = {
+            'Online': '#4CAF50',
+            'Offline': '#F44336',
+            'Connecting': '#FFC107'
+        };
+        return statusColors[status] || '#A0A0A0';
+    };
 
     // Handle input changes
     const handleInputChange = (e) => {
@@ -343,12 +369,7 @@ const AddCam = () => {
             <div className="monitor-container">
                 <h2 className="section-title">Camera <span className="highlight">Management</span></h2>
                 
-                {error && (
-                    <div className="error-message">
-                        <AlertCircle size={18} />
-                        <span>{error}</span>
-                    </div>
-                )}
+                {renderErrorTooltip()}
                 
                 <div className="monitor-content">
                     <div className="camera-list" ref={cameraListRef}>
@@ -357,17 +378,23 @@ const AddCam = () => {
                             {loading ? (
                                 <div className="loading-spinner"></div>
                             ) : cameras.length === 0 ? (
-                                <div className="no-cameras">
-                                    <Camera size={32} className="no-cameras-icon" />
-                                    <p>No cameras connected yet.</p>
-                                    <p>Add your first camera using the form.</p>
+                                <div className="camera-empty-state">
+                                    <Camera size={64} className="empty-state-icon" />
+                                    <h3>No Cameras Added</h3>
+                                    <p>Start by adding your first camera using the form on the right.</p>
                                 </div>
                             ) : (
                                 cameras.map(camera => (
                                     <div key={camera.id} className={`camera-item ${camera.status.toLowerCase()}`}>
                                         <div className="camera-info">
                                             <h4>{camera.name}</h4>
-                                            <span className="status-indicator"></span>
+                                            <span 
+                                                className="status-indicator" 
+                                                style={{
+                                                    backgroundColor: getCameraStatusColor(camera.status),
+                                                    boxShadow: `0 0 10px ${getCameraStatusColor(camera.status)}`
+                                                }}
+                                            ></span>
                                             <span className="status-text">{camera.status}</span>
                                         </div>
                                         <div className="camera-actions">
