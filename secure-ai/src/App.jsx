@@ -1,7 +1,8 @@
-import React, { Suspense, lazy } from "react";
+import React, { Suspense, lazy, useEffect } from "react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
+import { setupSmoothScroll, setupSectionFadeIn } from "./scripts/animations";
 import Navbar from "./components/navbar";
 import "./App.css";
 import './scripts/animations.js';
@@ -22,6 +23,11 @@ const PageLoader = () => (
 );
 
 const App = () => {
+  useEffect(() => {
+    setupSmoothScroll();
+    setupSectionFadeIn();
+  }, []);
+
   return (
     <div className="app-container">
       <Navbar />

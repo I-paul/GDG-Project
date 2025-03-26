@@ -9,7 +9,12 @@ from numpy.linalg import norm
 from ultralytics import YOLO
 from deep_sort_realtime.deepsort_tracker import DeepSort
 
+import google.generativeai as genai
 
+# Configure Gemini
+GEMINI_API_KEY = 'API_KEY'
+genai.configure(api_key=GEMINI_API_KEY)
+model = genai.GenerativeModel('gemini-pro-vision')
 
 # Parse command line arguments
 parser = argparse.ArgumentParser(description='Multi-camera face tracking system with IP camera support')
@@ -51,14 +56,20 @@ fps_display = True  # Display FPS counter
 time_last_updated = time.time()
 global_preview_frame = None  # A single frame to preview the currently tracked person
 
-# Configuration - optimized for performance and low latency
-DETECTION_CONFIDENCE = 0.35  # Lowered for better detection
-MAX_FRAME_WIDTH = 400  # Further reduced for faster processing
-DETECTION_INTERVAL = 0.03  # More frequent updates for better tracking
-MIN_DETECTION_INTERVAL = 0.02  # Faster updates when person is tracked
-FACE_DETECTION_INTERVAL = 0.08  # Faster face detection
-MAX_FEATURE_AGE = 3.0  # Reduced to be more responsive to changes
-ADAPTIVE_FEATURE_UPDATE = True  # Dynamically update features based on confidence
+# Configuration - optimized for stability and reduced flickering
+DETECTION_CONFIDENCE = 0.35
+MAX_FRAME_WIDTH = 400
+# ANTI-FLICKER IMPROVEMENTS: More consistent intervals
+DETECTION_INTERVAL = 0.1  # Increased detection interval for stability
+MIN_DETECTION_INTERVAL = 0.08  # More consistent minimum detection
+FACE_DETECTION_INTERVAL = 0.2  # Less frequent face detection to reduce flickering
+MAX_FEATURE_AGE = 5.0  # Increased to maintain track stability
+ADAPTIVE_FEATURE_UPDATE = True
+
+# ANTI-FLICKER IMPROVEMENTS: Add bounding box smoothing
+USE_BOX_SMOOTHING = True
+smoothed_boxes = {}  # Dictionary to store smoothed boxes with track IDs as keys
+SMOOTHING_FACTOR = 0.7  # Higher = smoother but less responsive
 
 # Use a faster face detector for better performance
 try:
@@ -179,14 +190,78 @@ def detect_faces_mediapipe(frame):
 feature_cache = []
 MAX_FEATURE_CACHE = 10
 
-# Process frames in a separate thread to reduce latency
+# ANTI-FLICKER IMPROVEMENTS: Add box stabilization mechanism
+def stabilize_box(track_id, new_box, alpha=0.3):
+    """Smooth bounding box transitions to reduce flickering"""
+    global smoothed_boxes
+    
+    if track_id not in smoothed_boxes:
+        smoothed_boxes[track_id] = new_box
+        return new_box
+    
+    # Get previous box
+    prev_box = smoothed_boxes[track_id]
+    
+    # Apply exponential moving average
+    x, y, w, h = prev_box
+    new_x, new_y, new_w, new_h = new_box
+    
+    # Smooth out the coordinates and dimensions
+    smooth_x = int(alpha * new_x + (1 - alpha) * x)
+    smooth_y = int(alpha * new_y + (1 - alpha) * y)
+    smooth_w = int(alpha * new_w + (1 - alpha) * w)
+    smooth_h = int(alpha * new_h + (1 - alpha) * h)
+    
+    smoothed_box = (smooth_x, smooth_y, smooth_w, smooth_h)
+    smoothed_boxes[track_id] = smoothed_box
+    
+    return smoothed_box
+
+# ANTI-FLICKER IMPROVEMENTS: Add detection throttling mechanism
+class DetectionThrottler:
+    def __init__(self):
+        self.last_face_detection = 0
+        self.last_person_detection = 0
+        self.detection_counts = {}
+        self.last_method = None
+    
+    def should_run_face_detection(self, current_time, tracking=False):
+        """Decide if face detection should run based on time and past results"""
+        # Longer intervals when not tracking to save resources
+        interval = FACE_DETECTION_INTERVAL * (0.8 if tracking else 2.0)
+        
+        # Consistently alternate between detection methods
+        if self.last_method == "face" and current_time - self.last_face_detection < interval * 2:
+            return False
+            
+        if current_time - self.last_face_detection >= interval:
+            self.last_face_detection = current_time
+            self.last_method = "face"
+            return True
+        return False
+    
+    def should_run_person_detection(self, current_time, frame_count, faces_found=0):
+        # If faces were found, we can skip person detection sometimes
+        if faces_found > 0 and frame_count % 3 != 0:
+            return False
+            
+        # Consistently alternate between detection methods
+        if self.last_method == "person" and current_time - self.last_person_detection < DETECTION_INTERVAL:
+            return False
+            
+        if current_time - self.last_person_detection >= DETECTION_INTERVAL:
+            self.last_person_detection = current_time
+            self.last_method = "person"
+            return True
+        return False
+
 # Process frames in a separate thread to reduce latency
 def process_frames(source_id, input_queue, output_queue):
     global selected_person_features, feature_cache, DETECTION_CONFIDENCE
     
     # Initialize tracker with optimized parameters for faster response
-    tracker = DeepSort(max_age=10, n_init=1, nn_budget=100, embedder="mobilenet", 
-                       embedder_gpu=True if device.type == 'cuda' else False)
+    tracker = DeepSort(max_age=15, n_init=2, nn_budget=100, embedder="mobilenet", 
+                      embedder_gpu=True if device.type == 'cuda' else False)
     
     frame_count = 0
     last_detection_time = time.time()
@@ -196,6 +271,14 @@ def process_frames(source_id, input_queue, output_queue):
     # For adaptive processing
     person_detected = False
     consecutive_detections = 0
+    
+    # Initialize detection throttler to reduce flickering
+    throttler = DetectionThrottler()
+    
+    # Track the last known detection to fill in gaps (anti-flicker)
+    last_detection_result = None
+    detection_gap_counter = 0
+    MAX_DETECTION_GAP = 5  # Maximum number of frames to keep showing previous detection
     
     while True:
         try:
@@ -211,15 +294,11 @@ def process_frames(source_id, input_queue, output_queue):
             frame_count += 1
             current_time = time.time()
             
-            # Dynamic detection interval - more frequent if tracking someone
+            # Dynamic detection interval - more consistent for stability
             if tracking_enabled and selected_person_features is not None:
-                if person_detected:
-                    # Even faster updates when actively tracking
-                    detection_interval = MIN_DETECTION_INTERVAL
-                else:
-                    detection_interval = DETECTION_INTERVAL
+                detection_interval = MIN_DETECTION_INTERVAL
             else:
-                detection_interval = DETECTION_INTERVAL * 1.5  # Slower updates when not tracking
+                detection_interval = DETECTION_INTERVAL
             
             # Only run detection on detection intervals
             if current_time - last_detection_time >= detection_interval:
@@ -234,14 +313,13 @@ def process_frames(source_id, input_queue, output_queue):
                     frame_resized = frame
                     
                 detections = []
+                faces_found = 0
                 
-                # Prioritize face detection when tracking is enabled
-                if tracking_enabled and selected_person_features is not None:
-                    # Run face detection more frequently when actively tracking
-                    should_run_face_detection = current_time - last_face_detection_time >= FACE_DETECTION_INTERVAL
-                else:
-                    # Less frequent face detection when not tracking anyone
-                    should_run_face_detection = current_time - last_face_detection_time >= FACE_DETECTION_INTERVAL * 2
+                # ANTI-FLICKER: More consistent face detection timing
+                should_run_face_detection = throttler.should_run_face_detection(
+                    current_time, 
+                    tracking=(tracking_enabled and selected_person_features is not None)
+                )
                 
                 # Run face detection if enabled and time
                 if USE_FACE_DETECTION and should_run_face_detection:
@@ -253,12 +331,13 @@ def process_frames(source_id, input_queue, output_queue):
                         gray = cv2.cvtColor(frame_resized, cv2.COLOR_BGR2GRAY)
                         faces = face_cascade.detectMultiScale(
                             gray,
-                            scaleFactor=1.05,  # Lower for better detection
-                            minNeighbors=4,    # Lower to catch more faces
-                            minSize=(20, 20),
+                            scaleFactor=1.1,  # Increased for more stability
+                            minNeighbors=5,   # Increased to reduce false positives
+                            minSize=(25, 25), # Increased minimum size
                             flags=cv2.CASCADE_SCALE_IMAGE
                         )
                     
+                    faces_found = len(faces)
                     for face in faces:
                         if isinstance(face, tuple):
                             x, y, w, h = face
@@ -273,22 +352,22 @@ def process_frames(source_id, input_queue, output_queue):
                             h = int(h / scale_factor)
                         
                         # Expand face box to include upper body for better tracking
-                        # Adjust expansion based on image size for better proportions
-                        expansion_factor = min(1.5, max(1.2, frame.shape[1] / 640))
-                        y_expanded = max(0, y - int(h * 0.15))
+                        # ANTI-FLICKER: More consistent body box expansion
+                        expansion_factor = 1.3  # Fixed expansion factor for consistency
+                        y_expanded = max(0, y - int(h * 0.1))
                         h_expanded = int(h * expansion_factor)
                         
                         # Add face detection as a person detection
                         # Convert to XYXY format for compatibility with DeepSORT
                         # Higher confidence for face detections
                         detections.append(([x, y_expanded, x + w, y_expanded + h_expanded], 0.95, 0, None))
-                    
-                    last_face_detection_time = current_time
                 
-                # Always run person detection as a fallback, but optimize for selected tracking
-                # Skip person detection every other frame if a face was detected
-                should_run_person_detection = len(detections) == 0 or frame_count % 2 == 0
+                # ANTI-FLICKER: More consistent person detection timing
+                should_run_person_detection = throttler.should_run_person_detection(
+                    current_time, frame_count, faces_found
+                )
                 
+                # Always run person detection as a fallback, but with more consistent timing
                 if should_run_person_detection:
                     results = yolo_model(frame_resized)[0]
                     
@@ -316,6 +395,17 @@ def process_frames(source_id, input_queue, output_queue):
                                 # Add person detection in XYXY format
                                 detections.append(([x1, y1, x2, y2], confidence, class_id, None))
                 
+                # ANTI-FLICKER: If no detections but we had recent ones, use the last result
+                if len(detections) == 0 and last_detection_result is not None and detection_gap_counter < MAX_DETECTION_GAP:
+                    # Use previous detection to avoid flickering
+                    detections = last_detection_result
+                    detection_gap_counter += 1
+                else:
+                    # We have new detections, update the last known result
+                    if len(detections) > 0:
+                        last_detection_result = detections
+                        detection_gap_counter = 0
+                
                 # Update the tracker with bounding boxes in the correct format
                 tracked_objects = tracker.update_tracks(detections, frame=frame)
                 last_detection_time = current_time
@@ -333,8 +423,18 @@ def process_frames(source_id, input_queue, output_queue):
                     if not track.is_confirmed():
                         continue
                     
+                    # Get box in TLWH format
+                    bbox = track.to_tlwh()
+                    
+                    # ANTI-FLICKER: Apply box smoothing for confirmed tracks
+                    if USE_BOX_SMOOTHING:
+                        # Convert to tuple for smoothing
+                        box_tuple = (int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3]))
+                        smoothed_bbox = stabilize_box(track.track_id, box_tuple, alpha=SMOOTHING_FACTOR)
+                        bbox = np.array(smoothed_bbox)
+                    
                     track_data = {
-                        'bbox': track.to_tlwh(),  # Convert to x,y,w,h format
+                        'bbox': bbox,  # Now contains smoothed bbox
                         'track_id': track.track_id,
                         'features': track.features[-1] if track.features is not None and len(track.features) > 0 else None,
                         'is_match': False,
@@ -349,7 +449,7 @@ def process_frames(source_id, input_queue, output_queue):
                         
                         track_data['similarity'] = similarity
                         
-                        # Only mark as match if similarity exceeds threshold
+                        # ANTI-FLICKER: Use more consistent threshold application
                         if similarity > args.similarity_threshold:
                             track_data['is_match'] = True
                             person_detected = True
@@ -365,31 +465,32 @@ def process_frames(source_id, input_queue, output_queue):
                 if best_match is not None:
                     last_seen_times[source_id] = current_time
                     
-                    # Update the feature vector with the latest appearance using adaptive approach
+                    # ANTI-FLICKER: More gradual feature updates
                     if ADAPTIVE_FEATURE_UPDATE and selected_person_features is not None:
-                        if best_similarity > 0.85:  # Very confident match
-                            # Add to feature cache
-                            feature_cache.append(best_match['features'])
-                            if len(feature_cache) > MAX_FEATURE_CACHE:
-                                feature_cache.pop(0)  # Remove oldest
-                            
-                            # Strong update - more weight to new features
-                            selected_person_features = 0.6 * selected_person_features + 0.4 * best_match['features']
+                        # Add to feature cache regardless of similarity
+                        feature_cache.append(best_match['features'])
+                        if len(feature_cache) > MAX_FEATURE_CACHE:
+                            feature_cache.pop(0)  # Remove oldest
+                        
+                        # Update with gradually increasing weight based on confidence
+                        if best_similarity > 0.9:  # Very confident match
+                            # Still use conservative update (was 0.6/0.4)
+                            selected_person_features = 0.85 * selected_person_features + 0.15 * best_match['features']
                             consecutive_detections += 1
-                        elif best_similarity > 0.75:  # Good match
-                            # Moderate update
-                            selected_person_features = 0.8 * selected_person_features + 0.2 * best_match['features']
+                        elif best_similarity > 0.8:  # Good match
+                            # More conservative update (was 0.8/0.2)
+                            selected_person_features = 0.9 * selected_person_features + 0.1 * best_match['features']
                             consecutive_detections += 1
                         else:  # Weak match
-                            # Minimal update
-                            selected_person_features = 0.95 * selected_person_features + 0.05 * best_match['features']
+                            # Minimal update (was 0.95/0.05)
+                            selected_person_features = 0.98 * selected_person_features + 0.02 * best_match['features']
                         
                         # Normalize the feature vector
                         selected_person_features = selected_person_features / (norm(selected_person_features) + 1e-6)
                     
                     # Update detection interval based on tracking success
                     if not previous_person_detected and person_detected:
-                        # Person just found - update more frequently
+                        # Person just found - update more frequently but not too fast
                         detection_interval = MIN_DETECTION_INTERVAL
                     elif consecutive_detections > 5:
                         # Stable tracking - can slightly reduce update frequency
@@ -405,10 +506,10 @@ def process_frames(source_id, input_queue, output_queue):
                     current_similarity = np.dot(selected_person_features, avg_features) / (
                         norm(selected_person_features) * norm(avg_features) + 1e-6)
                     
-                    # If cached features are very different, they might represent better appearance
+                    # ANTI-FLICKER: More conservative feature update
                     if current_similarity < 0.9:
-                        # Blend slightly with historical features
-                        selected_person_features = 0.9 * selected_person_features + 0.1 * avg_features
+                        # Even more conservative blend (was 0.9/0.1)
+                        selected_person_features = 0.95 * selected_person_features + 0.05 * avg_features
                         selected_person_features = selected_person_features / (norm(selected_person_features) + 1e-6)
                     
                     consecutive_detections = 0
@@ -492,7 +593,7 @@ print(f"🎥 Successfully opened {active_streams} camera streams")
 
 # Mouse click event to select a person
 def select_person(event, x, y, flags, param):
-    global selected_track_id, selected_person_features, tracking_enabled, global_preview_frame, feature_cache
+    global selected_track_id, selected_person_features, tracking_enabled, global_preview_frame, feature_cache, smoothed_boxes
     
     source_id = param['source_id']
     frame = param.get('frame')
@@ -511,6 +612,10 @@ def select_person(event, x, y, flags, param):
                     feature_cache = []
                     selected_person_features = track.get('features')
                     tracking_enabled = True
+                    
+                    # ANTI-FLICKER: Clear previous smoothed boxes
+                    smoothed_boxes = {}
+                    
                     print(f"🎯 Selected Person ID: {selected_track_id} from {source_id}")
                     
                     # Create a preview of the selected person
@@ -570,341 +675,332 @@ def add_ip_camera(url):
         return False
 
 # Set mouse callback for each camera window with shared frame data
-mouse_callback_data = {source_id: {'source_id': source_id, 'frame': None, 'tracks': []} for source_id in caps.keys()}
+# Set mouse callback for each camera window with shared frame data
+mouse_callback_data = {}
 for source_id in caps.keys():
     window_name = f"Camera {source_id}"
     cv2.namedWindow(window_name)
+    mouse_callback_data[source_id] = {'source_id': source_id, 'frame': None, 'tracks': []}
     cv2.setMouseCallback(window_name, select_person, mouse_callback_data[source_id])
 
-# Create control window with trackbars
-control_window = "Camera Controls"
-cv2.namedWindow(control_window, cv2.WINDOW_NORMAL)
-cv2.resizeWindow(control_window, 400, 300)
+# Create a window for tracked person preview if tracking enabled
+preview_window_name = "Tracked Person"
+cv2.namedWindow(preview_window_name, cv2.WINDOW_NORMAL)
+cv2.resizeWindow(preview_window_name, 150, 200)
 
-# Add trackbars for window size and matching threshold
-cv2.createTrackbar("Window Width", control_window, args.window_width, 1280, lambda x: None)
-cv2.createTrackbar("Window Height", control_window, args.window_height, 720, lambda x: None)
-cv2.createTrackbar("Match Threshold %", control_window, int(args.similarity_threshold * 100), 100, lambda x: None)
+# FPS calculation variables
+fps_start_time = time.time()
+fps_frame_count = 0
+fps_values = {}
 
-# Create trackbars for additional controls
-cv2.createTrackbar("Cross-Camera Tracking", control_window, 1, 1, lambda x: None)
-cv2.createTrackbar("Show FPS", control_window, 1, 1, lambda x: None)
-# Add detection sensitivity trackbar
-cv2.createTrackbar("Detection Sensitivity", control_window, 35, 50, lambda x: None)
-
-print("\n🔍 Controls:")
-print("- Press 'q' to quit")
-print("- Press 'r' to reset person tracking")
-print("- Press 'a' to add a new IP camera (enter URL in console)")
-print("- Press 't' to toggle tracking on/off")
-print("- Press 'c' to toggle cross-camera tracking")
-print("- Press 'f' to toggle FPS display")
-print("- Use trackbars to adjust window size and matching threshold")
-print("- Click on a person to track them\n")
-
-last_fps_time = time.time()
-frame_counts = {source_id: 0 for source_id in caps.keys()}
-fps_values = {source_id: 0 for source_id in caps.keys()}
-
-# Window layout management
-def arrange_windows(source_ids, window_width, window_height):
-    """Arrange windows in a grid layout"""
-    num_windows = len(source_ids)
-    if num_windows == 0:
-        return
-    
-    screen_width = 1920  # Assumed screen width
-    screen_height = 1080  # Assumed screen height
-    
-    # Calculate grid dimensions
-    cols = min(3, num_windows)  # Max 3 columns
-    rows = (num_windows + cols - 1) // cols
-    
-    # Calculate spacing and margins
-    margin_x = 20
-    margin_y = 40
-    spacing = 10
-    
-    # Calculate available area
-    available_width = screen_width - (margin_x * 2) - (spacing * (cols - 1))
-    available_height = screen_height - (margin_y * 2) - (spacing * (rows - 1))
-    
-    # Calculate window size
-    window_width = min(window_width, available_width // cols)
-    window_height = min(window_height, available_height // rows)
-    
-    # Position windows
-    for i, source_id in enumerate(source_ids):
-        row = i // cols
-        col = i % cols
-        
-        x = margin_x + col * (window_width + spacing)
-        y = margin_y + row * (window_height + spacing)
-        
-        window_name = f"Camera {source_id}"
-        cv2.moveWindow(window_name, x, y)
-        cv2.resizeWindow(window_name, window_width, window_height)
-
-# Create a priority queue for camera display
-# Continuing from where the code was cut off
-
-# Create a priority queue for camera display
-def update_camera_priority(source_ids, latest_camera=None):
-    """Reorder cameras to prioritize the one with the target"""
-    # Put the latest camera first, if any
-    ordered_sources = []
-    if latest_camera in source_ids:
-        ordered_sources.append(latest_camera)
-    
-    # Add the rest of the cameras
-    for source_id in source_ids:
-        if source_id != latest_camera:
-            ordered_sources.append(source_id)
-    
-    return ordered_sources
-
-# Main loop for capturing and processing frames
+# Main loop - capture frames and display results
 try:
-    # Initialize variables for frame rate calculation
-    start_time = time.time()
-    frame_count = 0
-    fps = 0
-    last_fps_update = start_time
-    
-    # Keep track of which camera last detected the person
-    latest_detection_camera = None
-    
     while True:
-        # Read trackbar values
-        window_width = cv2.getTrackbarPos("Window Width", control_window)
-        window_height = cv2.getTrackbarPos("Window Height", control_window)
-        similarity_threshold = cv2.getTrackbarPos("Match Threshold %", control_window) / 100.0
-        cross_camera_tracking = bool(cv2.getTrackbarPos("Cross-Camera Tracking", control_window))
-        fps_display = bool(cv2.getTrackbarPos("Show FPS", control_window))
-        detection_sensitivity = cv2.getTrackbarPos("Detection Sensitivity", control_window) / 100.0
-        
-        # Update detection confidence threshold
-        DETECTION_CONFIDENCE = max(0.2, min(0.5, detection_sensitivity))
-        
-        # Update similarity threshold
-        args.similarity_threshold = similarity_threshold
-        
-        # Arrange windows with updated size
-        arrange_windows(caps.keys(), window_width, window_height)
-        
-        # Process frames from all cameras
+        # Process all cameras
         for source_id, cap in caps.items():
-            ret, frame = cap.read()
-            
-            if not ret:
-                # Try to reconnect if stream is lost
-                print(f"⚠️ Lost connection to {source_id}, attempting to reconnect...")
-                # For IP cameras, try reopening
-                if source_id.startswith("ip_"):
-                    caps[source_id].release()
-                    time.sleep(0.5)
-                    caps[source_id] = cv2.VideoCapture(all_sources[source_id])
-                    ret, frame = caps[source_id].read()
-                    if not ret:
-                        # Skip this camera for this frame
-                        continue
-                else:
-                    # Skip this camera for this frame
-                    continue
-            
-            # Add frame to processing queue
-            if not frame_queues[source_id].full():
-                frame_queues[source_id].put(frame)
-            
-            # Get processed frame with detections
             try:
-                if not result_queues[source_id].empty():
-                    frame_with_tracks, tracks, best_match = result_queues[source_id].get(block=False)
+                # Read frame from camera with error handling
+                ret, frame = cap.read()
+                if not ret:
+                    print(f"⚠️ Failed to read frame from {source_id}, attempting to reconnect...")
+                    if source_id.startswith("ip_"):
+                        # Attempt to reconnect to IP camera
+                        url = all_sources[source_id]
+                        cap.release()
+                        caps[source_id] = cv2.VideoCapture(url)
+                        if caps[source_id].isOpened():
+                            print(f"✅ Successfully reconnected to {source_id}")
+                        continue
+                    elif source_id.startswith("local_"):
+                        # Attempt to reconnect to local camera
+                        cam_id = all_sources[source_id]
+                        cap.release()
+                        caps[source_id] = cv2.VideoCapture(cam_id)
+                        if caps[source_id].isOpened():
+                            print(f"✅ Successfully reconnected to {source_id}")
+                        continue
+                
+                # Put frame in processing queue
+                if not frame_queues[source_id].full():
+                    frame_queues[source_id].put(frame)
+                
+                # Try to get processed results without blocking
+                try:
+                    processed_frame, tracks, best_match = result_queues[source_id].get_nowait()
+                    result_queues[source_id].task_done()
                     
                     # Update mouse callback data
-                    mouse_callback_data[source_id]['frame'] = frame_with_tracks
+                    mouse_callback_data[source_id]['frame'] = processed_frame
                     mouse_callback_data[source_id]['tracks'] = tracks
                     
                     # Calculate FPS for this camera
-                    frame_counts[source_id] += 1
-                    current_time = time.time()
-                    if current_time - last_fps_time >= 1.0:
-                        # Update FPS
-                        fps_values[source_id] = frame_counts[source_id]
-                        frame_counts[source_id] = 0
-                        last_fps_time = current_time
+                    if source_id not in fps_values:
+                        fps_values[source_id] = {'start_time': time.time(), 'frames': 0, 'fps': 0}
                     
-                    # Update which camera last saw the person
-                    if best_match is not None:
-                        latest_detection_camera = source_id
+                    fps_values[source_id]['frames'] += 1
+                    elapsed = time.time() - fps_values[source_id]['start_time']
+                    if elapsed >= 1.0:  # Update FPS every second
+                        fps_values[source_id]['fps'] = fps_values[source_id]['frames'] / elapsed
+                        fps_values[source_id]['frames'] = 0
+                        fps_values[source_id]['start_time'] = time.time()
                     
-                    # Draw bounding boxes and labels
-                    for track in tracks:
-                        x, y, w, h = map(int, track['bbox'])
-                        track_id = track['track_id']
-                        similarity = track.get('similarity', 0)
-                        is_match = track.get('is_match', False)
-                        
-                        # Choose color based on match status
-                        if is_match:
-                            color = (0, 255, 0)  # Green for tracked person
-                            thickness = 2
-                        else:
-                            color = (255, 0, 0)  # Blue for other people
-                            thickness = 1
-                        
-                        # Draw bounding box
-                        cv2.rectangle(frame_with_tracks, (x, y), (x + w, y + h), color, thickness)
-                        
-                        # Display track ID and similarity score if applicable
-                        if is_match:
-                            label = f"Person {track_id} ({similarity:.2f})"
-                            cv2.putText(frame_with_tracks, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-                        else:
-                            label = f"ID: {track_id}"
-                            cv2.putText(frame_with_tracks, label, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+                    # Draw tracking results
+                    window_name = f"Camera {source_id}"
+                    display_frame = processed_frame.copy()
+                    
+                    # Add title showing camera source
+                    title = f"{source_id}"
+                    if source_id.startswith("ip_"):
+                        title = f"IP Camera {source_id.split('_')[1]}"
+                    elif source_id.startswith("local_"):
+                        title = f"Local Camera {source_id.split('_')[1]}"
+                    
+                    # Draw title bar
+                    cv2.rectangle(display_frame, (0, 0), (display_frame.shape[1], 30), (45, 45, 45), -1)
+                    cv2.putText(display_frame, title, (10, 20), 
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
                     
                     # Display FPS if enabled
                     if fps_display:
-                        cv2.putText(frame_with_tracks, f"FPS: {fps_values[source_id]}", 
-                                   (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+                        fps_text = f"FPS: {fps_values[source_id]['fps']:.1f}"
+                        cv2.putText(display_frame, fps_text, (display_frame.shape[1] - 120, 20),
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
                     
-                    # Show tracking status
+                    # Draw tracking boxes with target indicators
+                    for track in tracks:
+                        x, y, w, h = map(int, track['bbox'])
+                        track_id = track['track_id']
+                        
+                        # Choose color based on matching or random for each track
+                        if track.get('is_match', False) and tracking_enabled and selected_person_features is not None:
+                            # Matched person - green with intensity based on confidence
+                            similarity = track.get('similarity', 0)
+                            # Brighter green for higher confidence matches
+                            green_intensity = min(255, int(128 + 127 * similarity))
+                            color = (0, green_intensity, 0)
+                            thickness = 2
+                            
+                            # Add similarity percentage to label
+                            label = f"ID: {track_id} ({similarity:.2f})"
+                        else:
+                            # Different color for each track ID (but consistent)
+                            color_seed = abs(hash(str(track_id))) % 256
+                            color = ((color_seed * 1777) % 256, (color_seed * 2777) % 256, (color_seed * 3777) % 256)
+                            thickness = 1
+                            label = f"ID: {track_id}"
+                        
+                        # Draw bounding box and label
+                        cv2.rectangle(display_frame, (x, y), (x + w, y + h), color, thickness)
+                        
+                        # Add label with background for better visibility
+                        label_size, _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+                        label_width = label_size[0] + 10
+                        cv2.rectangle(display_frame, (x, y - 20), (x + label_width, y), color, -1)
+                        cv2.putText(display_frame, label, (x + 5, y - 5), 
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                        
+                        # For tracked person, draw additional indicators
+                        if track.get('is_match', False) and tracking_enabled and selected_person_features is not None:
+                            # Draw target corners for better visibility
+                            corner_length = min(20, min(w, h) // 3)
+                            
+                            # Top-left corner
+                            cv2.line(display_frame, (x, y), (x + corner_length, y), (0, 255, 255), 2)
+                            cv2.line(display_frame, (x, y), (x, y + corner_length), (0, 255, 255), 2)
+                            
+                            # Top-right corner
+                            cv2.line(display_frame, (x + w, y), (x + w - corner_length, y), (0, 255, 255), 2)
+                            cv2.line(display_frame, (x + w, y), (x + w, y + corner_length), (0, 255, 255), 2)
+                            
+                            # Bottom-left corner
+                            cv2.line(display_frame, (x, y + h), (x + corner_length, y + h), (0, 255, 255), 2)
+                            cv2.line(display_frame, (x, y + h), (x, y + h - corner_length), (0, 255, 255), 2)
+                            
+                            # Bottom-right corner
+                            cv2.line(display_frame, (x + w, y + h), (x + w - corner_length, y + h), (0, 255, 255), 2)
+                            cv2.line(display_frame, (x + w, y + h), (x + w, y + h - corner_length), (0, 255, 255), 2)
+                            
+                            # Update preview window if this is the best match
+                            if best_match is not None and best_match['track_id'] == track_id:
+                                person_crop = processed_frame[y:y+h, x:x+w].copy()
+                                if person_crop.size > 0:  # Ensure we have a valid crop
+                                    global_preview_frame = cv2.resize(person_crop, (100, 150))
+                    
+                    # Add tracking status indicator
+                    status_text = "TRACKING ON" if tracking_enabled else "TRACKING OFF"
                     status_color = (0, 255, 0) if tracking_enabled else (0, 0, 255)
-                    status_text = "Tracking: ON" if tracking_enabled else "Tracking: OFF"
-                    cv2.putText(frame_with_tracks, status_text, 
-                               (10, frame_with_tracks.shape[0] - 20), 
-                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, status_color, 2)
+                    cv2.putText(display_frame, status_text, (10, display_frame.shape[0] - 10),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, status_color, 2)
                     
-                    # Show camera status
-                    camera_text = f"Camera: {source_id}"
-                    cv2.putText(frame_with_tracks, camera_text,
-                               (10, frame_with_tracks.shape[0] - 50),
-                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+                    # Add last seen indicator if tracking is enabled
+                    if tracking_enabled and selected_person_features is not None:
+                        if source_id in last_seen_times:
+                            time_since_seen = time.time() - last_seen_times[source_id]
+                            if time_since_seen < 5.0:  # Recently seen
+                                seen_text = "PERSON PRESENT"
+                                seen_color = (0, 255, 0)
+                            else:
+                                seen_text = f"Last seen: {time_since_seen:.1f}s ago"
+                                seen_color = (0, 165, 255)  # Orange
+                        else:
+                            seen_text = "Not seen yet"
+                            seen_color = (0, 0, 255)  # Red
+                        
+                        cv2.putText(display_frame, seen_text, (display_frame.shape[1] - 200, display_frame.shape[0] - 10),
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, seen_color, 2)
                     
                     # Show the frame
-                    cv2.imshow(f"Camera {source_id}", frame_with_tracks)
-            except queue.Empty:
-                pass
-            except Exception as e:
-                print(f"Error displaying camera {source_id}: {e}")
-        
-        # Reorder cameras to prioritize the one with the detected person
-        if cross_camera_tracking and latest_detection_camera is not None:
-            # Update camera order based on priority
-            ordered_sources = update_camera_priority(caps.keys(), latest_detection_camera)
+                    cv2.imshow(window_name, display_frame)
+                
+                except queue.Empty:
+                    # No results yet, skip this camera for now
+                    pass
             
-            # Apply the new order by rearranging windows
-            arrange_windows(ordered_sources, window_width, window_height)
+            except Exception as e:
+                print(f"Error processing camera {source_id}: {e}")
+                # Try to recover by releasing and re-opening the camera
+                try:
+                    if source_id in caps:
+                        caps[source_id].release()
+                        if source_id.startswith("ip_"):
+                            url = all_sources[source_id]
+                            caps[source_id] = cv2.VideoCapture(url)
+                        elif source_id.startswith("local_"):
+                            cam_id = all_sources[source_id]
+                            caps[source_id] = cv2.VideoCapture(cam_id)
+                except Exception as e2:
+                    print(f"Failed to recover camera {source_id}: {e2}")
         
-        # Show the preview of the selected person if available
-        if global_preview_frame is not None:
-            cv2.imshow("Tracked Person", global_preview_frame)
+        # Display preview of tracked person if available
+        if global_preview_frame is not None and tracking_enabled:
+            # Create an info panel with tracking stats
+            preview_display = np.zeros((200, 200, 3), dtype=np.uint8)
+            
+            # Add the person image
+            h, w = global_preview_frame.shape[:2]
+            preview_display[10:10+h, 50:50+w] = global_preview_frame
+            
+            # Add tracking info
+            if selected_track_id is not None:
+                cv2.putText(preview_display, f"ID: {selected_track_id}", (10, 180), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                
+                # Count cameras where the person is visible
+                visible_count = sum(1 for t in last_seen_times.values() if time.time() - t < 5.0)
+                cv2.putText(preview_display, f"Visible on: {visible_count}/{len(caps)} cams", 
+                           (10, 195), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
+            
+            cv2.imshow(preview_window_name, preview_display)
         
-        # Update control window with current status
-        control_frame = np.zeros((300, 400, 3), dtype=np.uint8)
-        
-        # Add tracking status info
-        cv2.putText(control_frame, "Tracking Status:", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
-        status_color = (0, 255, 0) if tracking_enabled else (0, 0, 255)
-        status_text = "ENABLED" if tracking_enabled else "DISABLED"
-        cv2.putText(control_frame, status_text, (200, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, status_color, 2)
-        
-        # Add cross-camera status
-        cv2.putText(control_frame, "Cross-Camera:", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
-        cross_color = (0, 255, 0) if cross_camera_tracking else (0, 0, 255)
-        cross_text = "ENABLED" if cross_camera_tracking else "DISABLED"
-        cv2.putText(control_frame, cross_text, (200, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, cross_color, 2)
-        
-        # Add person ID info
-        if selected_track_id is not None:
-            cv2.putText(control_frame, f"Tracking ID: {selected_track_id}", (10, 90), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
-        else:
-            cv2.putText(control_frame, "No person selected", (10, 90), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 1)
-        
-        # Add help text
-        cv2.putText(control_frame, "Press 'q' to quit", (10, 150), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
-        cv2.putText(control_frame, "Press 'r' to reset tracking", (10, 180), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
-        cv2.putText(control_frame, "Press 't' to toggle tracking", (10, 210), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
-        cv2.putText(control_frame, "Press 'a' to add IP camera", (10, 240), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
-        
-        # Show control window
-        cv2.imshow(control_window, control_frame)
-        
-        # Process key presses
+        # Check for key presses
         key = cv2.waitKey(1) & 0xFF
         
-        if key == ord('q'):
-            print("👋 Exiting...")
-            break
+        # Toggle tracking with 't' key
+        if key == ord('t'):
+            tracking_enabled = not tracking_enabled
+            print(f"🔍 Tracking {'Enabled' if tracking_enabled else 'Disabled'}")
+        
+        # Reset tracking with 'r' key
         elif key == ord('r'):
-            # Reset tracking
-            selected_track_id = None
             selected_person_features = None
+            selected_track_id = None
+            tracking_enabled = True
             global_preview_frame = None
             feature_cache = []
-            print("🔄 Reset tracking")
-        elif key == ord('t'):
-            # Toggle tracking
-            tracking_enabled = not tracking_enabled
-            status = "enabled" if tracking_enabled else "disabled"
-            print(f"🔍 Tracking {status}")
+            smoothed_boxes = {}
+            last_seen_times.clear()
+            print("🔄 Tracking Reset")
+        
+        # Toggle cross-camera tracking with 'c' key
         elif key == ord('c'):
-            # Toggle cross-camera tracking
             cross_camera_tracking = not cross_camera_tracking
-            cv2.setTrackbarPos("Cross-Camera Tracking", control_window, 1 if cross_camera_tracking else 0)
-            status = "enabled" if cross_camera_tracking else "disabled"
-            print(f"🔄 Cross-camera tracking {status}")
+            print(f"🔀 Cross-Camera Tracking {'Enabled' if cross_camera_tracking else 'Disabled'}")
+        
+        # Toggle FPS display with 'f' key
         elif key == ord('f'):
-            # Toggle FPS display
             fps_display = not fps_display
-            cv2.setTrackbarPos("Show FPS", control_window, 1 if fps_display else 0)
-            status = "shown" if fps_display else "hidden"
-            print(f"⏱️ FPS display {status}")
+            print(f"⏱️ FPS Display {'Enabled' if fps_display else 'Disabled'}")
+        
+        # Add new IP camera with 'a' key
         elif key == ord('a'):
-            # Add a new IP camera
-            print("Enter the URL of the IP camera (e.g., rtsp://username:password@192.168.1.64:554/Streaming/Channels/1):")
-            url = input().strip()
-            if url:
-                add_ip_camera(url)
+            print("📹 Enter RTSP URL for new camera (e.g., rtsp://user:pass@192.168.1.100:554/stream):")
+            cv2.destroyWindow("Input")
+            cv2.namedWindow("Input")
+            cv2.moveWindow("Input", 100, 100)
+            
+            # Create a simple input dialog
+            input_frame = np.zeros((100, 600, 3), dtype=np.uint8)
+            cv2.putText(input_frame, "Type URL and press Enter. ESC to cancel.", (10, 30), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 1)
+            cv2.imshow("Input", input_frame)
+            
+            # Collect keyboard input
+            ip_url = ""
+            collecting_input = True
+            while collecting_input:
+                input_frame = np.zeros((100, 600, 3), dtype=np.uint8)
+                cv2.putText(input_frame, "Type URL and press Enter. ESC to cancel.", (10, 30), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 1)
+                cv2.putText(input_frame, ip_url, (10, 70), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                cv2.imshow("Input", input_frame)
+                
+                k = cv2.waitKey(0) & 0xFF
+                if k == 27:  # ESC key
+                    collecting_input = False
+                elif k == 13:  # Enter key
+                    if ip_url:
+                        add_ip_camera(ip_url)
+                    collecting_input = False
+                elif k == 8:  # Backspace
+                    ip_url = ip_url[:-1]
+                elif 32 <= k <= 126:  # Printable ASCII
+                    ip_url += chr(k)
+            
+            cv2.destroyWindow("Input")
         
-        # Calculate overall FPS
-        frame_count += 1
-        current_time = time.time()
-        elapsed_time = current_time - start_time
+        # Adjust similarity threshold with up/down arrows
+        elif key == 82:  # Up arrow
+            args.similarity_threshold = min(0.95, args.similarity_threshold + 0.05)
+            print(f"⬆️ Similarity Threshold: {args.similarity_threshold:.2f}")
+        elif key == 84:  # Down arrow
+            args.similarity_threshold = max(0.5, args.similarity_threshold - 0.05)
+            print(f"⬇️ Similarity Threshold: {args.similarity_threshold:.2f}")
         
-        if elapsed_time >= 1.0:
-            fps = frame_count / elapsed_time
-            frame_count = 0
-            start_time = current_time
+        # Save tracked person image with 's' key
+        elif key == ord('s') and global_preview_frame is not None:
+            timestamp = int(time.time())
+            filename = f"tracked_person_{timestamp}.jpg"
+            cv2.imwrite(filename, global_preview_frame)
+            print(f"💾 Saved tracked person image to {filename}")
+        
+        # Exit with 'q' or ESC key
+        elif key == ord('q') or key == 27:
+            break
 
 except KeyboardInterrupt:
-    print("👋 Program terminated by user")
-except Exception as e:
-    print(f"❌ Error in main loop: {e}")
+    print("👋 Program interrupted by user")
+
 finally:
-    # Clean up
-    # Stop processing threads by sending None
-    for source_id in processing_threads.keys():
-        frame_queues[source_id].put(None)
+    # Clean up resources
+    print("🧹 Cleaning up...")
     
-    # Wait for threads to finish
-    for source_id, thread in processing_threads.items():
-        thread.join(timeout=1.0)
+    # Signal threads to exit and join
+    for source_id in frame_queues:
+        try:
+            frame_queues[source_id].put(None)  # Signal to exit
+            if source_id in processing_threads:
+                processing_threads[source_id].join(timeout=1.0)
+        except Exception as e:
+            print(f"Error closing thread for {source_id}: {e}")
     
-    # Release video captures
-    for cap in caps.values():
-        cap.release()
+    # Release all camera captures
+    for source_id, cap in caps.items():
+        try:
+            cap.release()
+        except Exception as e:
+            print(f"Error releasing camera {source_id}: {e}")
     
     # Close all windows
     cv2.destroyAllWindows()
-    print("✅ Resources released. Exiting.")
-
-if __name__ == "__main__":
-    print("Multi-camera face tracking system terminated.")
+    print("✅ Program terminated successfully")

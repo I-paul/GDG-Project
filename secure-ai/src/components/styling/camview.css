@@ -27,7 +27,10 @@
   --purple-to-pink-gradient: linear-gradient(135deg, var(--purple), var(--pink));
   --button-gradient: linear-gradient(135deg, var(--purple), var(--pink));
 }
-
+body{
+  margin: 0;
+  padding: 0;
+}
 /* Main container styling */
 .viewer {
   background: var(--dark-bg);
