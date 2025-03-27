@@ -1,7 +1,8 @@
 import { db } from '../firebase';
 import { collection, getDocs, query, where } from 'firebase/firestore';
+import axios from 'axios'; // Assuming you're using axios for HTTP requests
 
-const API_BASE_URL = 'http://your-backend-ip:5000'; 
+const API_BASE_URL = 'http://localhost:5000'; 
 
 // Fetch cameras from Firebase
 export const fetchCameras = async (userId) => {
@@ -32,6 +33,34 @@ export const updateCamViewer = async (setCameras, userId) => {
     } catch (error) {
         console.error('Error updating cam viewer:', error);
         setCameras([]);
+        throw error;
+    }
+};
+
+// New function to send camera information to backend
+export const sendCameraInfoToBackend = async (userId) => {
+    try {
+        // Fetch cameras for the user
+        const cameras = await fetchCameras(userId);
+        
+        // Prepare payload to send to backend
+        const payload = {
+            userId: userId,
+            totalCameras: cameras.length,
+            cameraDetails: cameras.map(camera => ({
+                cameraId: camera.id,
+                name: camera.name,
+                location: camera.location,
+                streamUrl: camera.aiStreamUrl
+            }))
+        };
+
+        // Send information to backend
+        const response = await axios.post(`${API_BASE_URL}/register_cameras`, payload);
+        
+        return response.data;
+    } catch (error) {
+        console.error('Error sending camera info to backend:', error);
         throw error;
     }
 };

@@ -15,6 +15,8 @@ from deep_sort_realtime.deepsort_tracker import DeepSort
 import asyncio
 import websockets
 
+from flask import Flask, request, jsonify
+
 # Parse command line arguments
 parser = argparse.ArgumentParser(description='AI-powered multi-camera video processing')
 parser.add_argument('--ip-cameras', nargs='+', type=str, required=True,
@@ -179,14 +181,50 @@ async def websocket_server(processors, port):
     print(f"WebSocket server started on port {port}")
     await server.wait_closed()
 
+app = Flask(__name__)
+
+# Store camera information
+camera_data = {}
+
+@app.route('/register_cameras', methods=['POST'])
+def register_cameras():
+    try:
+        # Parse incoming JSON data
+        data = request.get_json()
+        user_id = data.get('userId')
+        camera_details = data.get('cameraDetails', [])
+
+        # Store camera details in memory
+        camera_data[user_id] = camera_details
+
+        # Log the received data
+        print(f"Received camera data for user {user_id}: {camera_details}")
+
+        # Return success response
+        return jsonify({"message": "Cameras registered successfully"}), 200
+    except Exception as e:
+        print(f"Error in /register_cameras: {e}")
+        return jsonify({"error": "Failed to register cameras"}), 500
+
+# Run Flask server in a separate thread
+def run_flask_server():
+    app.run(host='0.0.0.0', port=5000)
+
 # Main execution
 def main():
+    # Wait for camera data from the frontend
+    while not camera_data:
+        print("Waiting for camera data from frontend...")
+        time.sleep(2)
+
     # Create processors for each camera
     processors = {}
-    for i, camera_url in enumerate(args.ip_cameras):
-        processor = CameraProcessor(camera_url)
-        processor.start()
-        processors[f"camera_{i}"] = processor
+    for user_id, cameras in camera_data.items():
+        for camera in cameras:
+            camera_url = camera['streamUrl']
+            processor = CameraProcessor(camera_url)
+            processor.start()
+            processors[camera['cameraId']] = processor
 
     # Start WebSocket server
     try:

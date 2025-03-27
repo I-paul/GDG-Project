@@ -23,12 +23,21 @@ const CamViewer = () => {
     const auth = getAuth();
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, (user) => {
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
                 setLoading(true);
-                updateCamViewer(setCameras, user.uid)
-                    .then(() => setLoading(false))
-                    .catch(() => setLoading(false));
+                try {
+                    // Update camera viewer
+                    await updateCamViewer(setCameras, user.uid);
+                    
+                    // Send camera info to backend
+                    await sendCameraInfoToBackend(user.uid);
+                    
+                    setLoading(false);
+                } catch (error) {
+                    console.error('Error in camera setup:', error);
+                    setLoading(false);
+                }
             } else {
                 navigate('/login');
             }
