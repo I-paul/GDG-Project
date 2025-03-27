@@ -27,5 +27,10 @@ dist-ssr
 yolov8n.pt
 
 test2.py
+<<<<<<< Updated upstream
+=======
+test3.py
+test.py
+>>>>>>> Stashed changes
 
 .env
