@@ -1,20 +1,36 @@
-import {useGSAP} from '@gsap/react';
+import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { useRef, useState, useEffect } from 'react';
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
+import { User } from 'lucide-react';
 import './styling/navbar.css';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { auth } from '../firebase';
 
 const Navbar = () => {
+    const navigate = useNavigate();
     const nav = useRef();
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    const [user, setUser] = useState(null);
+    const [dropdownOpen, setDropdownOpen] = useState(false);
     
-    gsap.registerPlugin(useGSAP,scroll);
+    gsap.registerPlugin(useGSAP);
     
     useGSAP(() => {
         gsap.fromTo(nav.current, 
             {y: '-100%', ease: 'bounce'}, 
             {duration: 1.3, y: '0'});
     });
+
+    useEffect(() => {
+        // Monitor authentication state
+        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+            setUser(currentUser);
+        });
+        
+        return () => unsubscribe(); // Cleanup subscription
+    }, []);
 
     useEffect(() => {
         const handleScroll = () => {
@@ -53,6 +69,24 @@ const Navbar = () => {
         setMobileMenuOpen(!mobileMenuOpen);
     };
 
+    const navigateToLogin = () => {
+        navigate('/login');
+        setMobileMenuOpen(false);
+    };
+
+    const toggleDropdown = () => {
+        setDropdownOpen(!dropdownOpen);
+    };
+
+    const handleLogout = async () => {
+        try {
+            await signOut(auth);
+            setDropdownOpen(false);
+        } catch (error) {
+            console.error("Error signing out: ", error);
+        }
+    };
+
     return (
         <nav className='nav' ref={nav}>
             <div className="logo">
@@ -69,12 +103,55 @@ const Navbar = () => {
                 <li className='link'><a href="#home" onClick={(e) => handleClick(e, '#home')}>Home</a></li>
                 <li className='link'><a href="#monitor" onClick={(e) => handleClick(e, '#monitor')}>Monitor</a></li>
                 <li className='link'><a href="#contact" onClick={(e) => handleClick(e, '#contact')}>Contact</a></li>
-                <li className='mobile-auth'>
-                    <div className='auth-button'>Login</div>
-                </li>
+                {!user && (
+                    <li className='mobile-auth'>
+                        <div className='auth-button' onClick={navigateToLogin}>Login</div>
+                    </li>
+                )}
+                {user && (
+                    <li className='mobile-auth'>
+                        <div className='profile-wrapper'>
+                            <div className='user-profile' onClick={toggleDropdown}>
+                                {user.photoURL ? (
+                                    <img src={user.photoURL} alt="Profile" className="profile-image" />
+                                ) : (
+                                    <div className="profile-icon">
+                                        <User size={24} color="white" />
+                                    </div>
+                                )}
+                            </div>
+                            {dropdownOpen && (
+                                <div className='profile-dropdown mobile-dropdown'>
+                                    <div className='dropdown-email'>{user.email}</div>
+                                    <div className='dropdown-item' onClick={handleLogout}>Logout</div>
+                                </div>
+                            )}
+                        </div>
+                    </li>
+                )}
             </ul>
             
-            <div className='auth-button desktop-auth'>Login</div>
+            {!user ? (
+                <div className='auth-button desktop-auth' onClick={navigateToLogin}>Login</div>
+            ) : (
+                <div className='profile-wrapper desktop-auth'>
+                    <div className='user-profile' onClick={toggleDropdown}>
+                        {user.photoURL ? (
+                            <img src={user.photoURL} alt="Profile" className="profile-image" />
+                        ) : (
+                            <div className="profile-icon">
+                                <User size={24} color="white" />
+                            </div>
+                        )}
+                    </div>
+                    {dropdownOpen && (
+                        <div className='profile-dropdown'>
+                            <div className='dropdown-email'>{user.email}</div>
+                            <div className='dropdown-item' onClick={handleLogout}>Logout</div>
+                        </div>
+                    )}
+                </div>
+            )}
         </nav>
     );
 };

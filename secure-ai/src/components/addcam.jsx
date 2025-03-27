@@ -1,40 +1,59 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import ScrollTrigger from 'gsap/ScrollTrigger';
-import { AlertCircle, CheckCircle, Camera, Edit } from 'lucide-react';
+import { AlertCircle, CheckCircle, Camera, Edit, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { db } from '../firebase';
+import { collection, addDoc, getDocs, deleteDoc, doc, getDoc, updateDoc, query, where } from 'firebase/firestore';
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import './styling/addcam.css';
+
+// Error messages object for better management
+const ERROR_MESSAGES = {
+  NO_ACCESS: "You don't have access to this camera.",
+  ALREADY_CONNECTED: "You are already connected to this camera.",
+  NEED_LOGIN: "You must be logged in to add a camera.",
+  GENERAL_ERROR: "Error occurred. Please try again.",
+  FETCH_ERROR: "Error fetching cameras. Please refresh the page.",
+  DELETE_ERROR: "Error removing camera. Please try again."
+};
+
+// Input validation functions
+const validateIpAddress = (ip) => {
+  const ipPattern = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+  return ipPattern.test(ip);
+};
+
+const validatePort = (port) => {
+  return /^\d+$/.test(port) && parseInt(port) >= 0 && parseInt(port) <= 65535;
+};
 
 const AddCam = () => {
     const addCamRef = useRef(null);
     const formRef = useRef(null);
     const cameraListRef = useRef(null);
+    
     const navigate = useNavigate();
     
-    // State for camera management
-    const [cameras, setCameras] = useState([
-        { id: 1, name: "Front Door Camera", status: "Online", ip: "192.168.1.101", port: "8080", username: "admin", location: "Front Door" },
-        { id: 2, name: "Back Yard Camera", status: "Offline", ip: "192.168.1.102", port: "8080", username: "admin", location: "Back Yard" },
-        { id: 3, name: "Living Room Camera", status: "Online", ip: "192.168.1.103", port: "8080", username: "admin", location: "Living Room" },
-        { id: 4, name: "Garage Camera", status: "Online", ip: "192.168.1.104", port: "8080", username: "admin", location: "Garage" },
-        { id: 5, name: "Side Gate Camera", status: "Offline", ip: "192.168.1.105", port: "8080", username: "admin", location: "Side Gate" }
-    ]);
-    
-    // State for new camera form
+    const auth = getAuth();
+    const [userId, setUserId] = useState(null);
+    const [cameras, setCameras] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+    const [isDeleting, setIsDeleting] = useState(false);
     const [newCamera, setNewCamera] = useState({
         name: "",
         ip: "",
         port: "",
         username: "",
-        password: "",
         location: ""
     });
     
-    // Initialize GSAP
-    gsap.registerPlugin(useGSAP, ScrollTrigger);
-    
+    // GSAP Animation
     useGSAP(() => {
+        gsap.registerPlugin(ScrollTrigger);
+        
         gsap.fromTo(cameraListRef.current, { opacity: 0 }, {
             opacity: 1,
             duration: 2,
@@ -63,73 +82,259 @@ const AddCam = () => {
             delay: 0.4
         });
     }, { scope: addCamRef });
+    
+    // Check authentication status
+    useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
+            if (user) {
+                setUserId(user.uid);
+            } else {
+                navigate('/login');
+            }
+            setLoading(false);
+        });
+        return () => unsubscribe();
+    }, [auth, navigate]);
+    
+    // Fetch cameras function
+    const fetchCameras = useCallback(async (uid) => {
+        if (!uid) return;
+        
+        setLoading(true);
+        setError('');
+        
+        try {
+            const userDoc = await getDoc(doc(db, "Users", uid));
+            
+            if (userDoc.exists()) {
+                const userData = userDoc.data();
+                const connectedCameraIds = userData.connected_cameras || [];
+                
+                if (connectedCameraIds.length > 0) {
+                    const cameraPromises = connectedCameraIds.map(camId => 
+                        getDoc(doc(db, "Cameras", camId))
+                        .catch(err => {
+                            console.error(`Error fetching camera ${camId}:`, err);
+                            return null;
+                        })
+                    );
+                    
+                    const cameraDocs = await Promise.all(cameraPromises);
+                    const cameraData = cameraDocs
+                        .filter(doc => doc && doc.exists())
+                        .map(doc => ({ 
+                            id: doc.id, 
+                            ...doc.data(),
+                            // Add properties for camview.jsx compatibility
+                            type: "external",
+                            streamUrl: `http://${doc.data().ip}:${doc.data().port}/stream`,
+                            streamFormat: "hls"
+                        }));
+                    
+                    setCameras(cameraData);
+                    
+                    // Sync with localStorage for camview.jsx
+                    localStorage.setItem('cameras', JSON.stringify(cameraData));
+                } else {
+                    setCameras([]);
+                    localStorage.removeItem('cameras');
+                }
+            }
+        } catch (error) {
+            console.error("Error fetching cameras:", error);
+            setError(ERROR_MESSAGES.FETCH_ERROR);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+    
+    // Fetch cameras when userId changes
+    useEffect(() => {
+        if (userId) {
+            fetchCameras(userId);
+        }
+    }, [userId, fetchCameras]);
 
-    // Handle form input changes
+    // Handle input changes
     const handleInputChange = (e) => {
         const { id, value } = e.target;
+        const fieldName = id.replace('camera', '').toLowerCase();
+        
         setNewCamera({
             ...newCamera,
-            [id.replace('camera', '').toLowerCase()]: value
+            [fieldName]: value
         });
+        
+        // Clear error when user types
+        if (error) setError('');
+    };
+
+    // Validate camera form
+    const validateCameraForm = () => {
+        if (!newCamera.name.trim()) {
+            setError("Camera name is required.");
+            return false;
+        }
+        
+        if (!validateIpAddress(newCamera.ip)) {
+            setError("Please enter a valid IP address.");
+            return false;
+        }
+        
+        if (!validatePort(newCamera.port)) {
+            setError("Please enter a valid port number (0-65535).");
+            return false;
+        }
+        
+        return true;
     };
 
     // Handle form submission
-    const handleFormSubmit = (e) => {
+    const handleFormSubmit = async (e) => {
         e.preventDefault();
         
-        // Create new camera object
-        const newCameraObj = {
-            id: cameras.length + 1,
-            name: newCamera.name,
-            status: "Online", // Default status
-            ip: newCamera.ip,
-            port: newCamera.port,
-            username: newCamera.username,
-            location: newCamera.location
-        };
+        if (!userId) {
+            setError(ERROR_MESSAGES.NEED_LOGIN);
+            navigate('/login');
+            return;
+        }
         
-        // Add to cameras array
-        setCameras([...cameras, newCameraObj]);
+        if (!validateCameraForm()) {
+            return;
+        }
         
-        // Store updated cameras in localStorage
-        localStorage.setItem('cameras', JSON.stringify([...cameras, newCameraObj]));
+        setLoading(true);
+        setError('');
         
-        // Reset form
-        setNewCamera({
-            name: "",
-            ip: "",
-            port: "",
-            username: "",
-            password: "",
-            location: ""
-        });
-        
-        // Success animation
-        const formElement = formRef.current;
-        gsap.to(formElement, {
-            borderColor: "var(--purple)",
-            boxShadow: "0 0 20px var(--purple-transparent)",
-            duration: 0.3,
-            onComplete: () => {
-                gsap.to(formElement, {
-                    borderColor: "rgba(255, 105, 180, 0.2)",
-                    boxShadow: "0 8px 32px rgba(255, 105, 180, 0.1)",
-                    duration: 0.5,
-                    delay: 1
+        try {
+            // Check if camera already exists
+            const cameraQuery = await getDocs(
+                query(collection(db, "Cameras"), where("ip", "==", newCamera.ip))
+            );
+            
+            if (!cameraQuery.empty) {
+                const existingCamera = cameraQuery.docs[0];
+                const cameraData = existingCamera.data();
+                
+                if (cameraData.owner === userId || (cameraData.allowed_users && cameraData.allowed_users.includes(userId))) {
+                    setError(ERROR_MESSAGES.ALREADY_CONNECTED);
+                    setLoading(false);
+                    return;
+                } else {
+                    setError(ERROR_MESSAGES.NO_ACCESS);
+                    setLoading(false);
+                    return;
+                }
+            }
+            
+            // Add the new camera
+            const newCameraRef = await addDoc(collection(db, "Cameras"), {
+                name: newCamera.name,
+                ip: newCamera.ip,
+                port: newCamera.port,
+                username: newCamera.username,
+                location: newCamera.location,
+                owner: userId,
+                allowed_users: [],
+                status: "Online",
+                created_at: new Date(),
+                last_updated: new Date()
+            });
+            
+            const newCameraId = newCameraRef.id;
+            
+            // Update user's connected cameras
+            const userRef = doc(db, "Users", userId);
+            const userDoc = await getDoc(userRef);
+            
+            if (userDoc.exists()) {
+                const userData = userDoc.data();
+                const connectedCameras = userData.connected_cameras || [];
+                
+                await updateDoc(userRef, {
+                    connected_cameras: [...connectedCameras, newCameraId],
+                    last_updated: new Date()
                 });
             }
-        });
+            
+            // Fetch updated cameras to ensure consistent state
+            await fetchCameras(userId);
+            
+            // Reset form
+            setNewCamera({ name: "", ip: "", port: "", username: "", location: "" });
+            
+            // Success animation
+            if (formRef.current) {
+                gsap.to(formRef.current, {
+                    borderColor: "var(--purple)",
+                    boxShadow: "0 0 20px var(--purple-transparent)",
+                    duration: 0.3,
+                    onComplete: () => {
+                        gsap.to(formRef.current, {
+                            borderColor: "rgba(255, 105, 180, 0.2)",
+                            boxShadow: "0 8px 32px rgba(255, 105, 180, 0.1)",
+                            duration: 0.5,
+                            delay: 1
+                        });
+                    }
+                });
+            }
+            
+        } catch (error) {
+            console.error("Error adding camera:", error);
+            setError(ERROR_MESSAGES.GENERAL_ERROR);
+        } finally {
+            setLoading(false);
+        }
     };
 
-    // Navigate to camera view page
-    const handleViewCameras = () => {
-        navigate('/camera-view');
+    // Handle camera deletion
+    const handleDeleteCamera = async (cameraId) => {
+        if (isDeleting) return;
+        
+        const confirmDelete = window.confirm("Are you absolutely sure you want to remove this camera? This will permanently delete the camera from your account.");
+        
+        if (confirmDelete) {
+            setIsDeleting(true);
+            
+            try {
+                // Get user document
+                const userRef = doc(db, "Users", userId);
+                const userDoc = await getDoc(userRef);
+                
+                if (userDoc.exists()) {
+                    const userData = userDoc.data();
+                    const connectedCameras = userData.connected_cameras || [];
+                    
+                    // Remove camera ID from user's connected_cameras array
+                    const updatedCameras = connectedCameras.filter(id => id !== cameraId);
+                    
+                    // Update user document
+                    await updateDoc(userRef, {
+                        connected_cameras: updatedCameras,
+                        last_updated: new Date()
+                    });
+                    
+                    // Delete the camera document from Cameras collection
+                    await deleteDoc(doc(db, "Cameras", cameraId));
+                    
+                    // Fetch updated cameras
+                    await fetchCameras(userId);
+                    
+                    // Optional: Add a toast or notification for successful deletion
+                    console.log("Camera successfully deleted");
+                }
+            } catch (error) {
+                console.error("Error deleting camera:", error);
+                setError(ERROR_MESSAGES.DELETE_ERROR);
+            } finally {
+                setIsDeleting(false);
+            }
+        }
     };
-    
-    // Handle editing camera
-    const handleEditCamera = (cameraId) => {
-        // You can implement the edit functionality here
-        // For now, just navigate to camera view
+
+    // Navigate to camera view
+    const handleViewCameras = () => {
         navigate('/camera-view');
     };
 
@@ -138,34 +343,60 @@ const AddCam = () => {
             <div className="monitor-container">
                 <h2 className="section-title">Camera <span className="highlight">Management</span></h2>
                 
+                {error && (
+                    <div className="error-message">
+                        <AlertCircle size={18} />
+                        <span>{error}</span>
+                    </div>
+                )}
+                
                 <div className="monitor-content">
                     <div className="camera-list" ref={cameraListRef}>
                         <h3>Connected Cameras</h3>
                         <div className="camera-list-container">
-                            {cameras.map(camera => (
-                                <div key={camera.id} className={`camera-item ${camera.status.toLowerCase()}`}>
-                                    <div className="camera-info">
-                                        <h4>{camera.name}</h4>
-                                        <span className="status-indicator"></span>
-                                        <span className="status-text">{camera.status}</span>
-                                    </div>
-                                    <div className="camera-actions">
-                                        <button 
-                                            className="edit-btn"
-                                            onClick={() => handleEditCamera(camera.id)}
-                                        >
-                                            <Edit size={16} />
-                                        </button>
-                                    </div>
+                            {loading ? (
+                                <div className="loading-spinner"></div>
+                            ) : cameras.length === 0 ? (
+                                <div className="no-cameras">
+                                    <Camera size={32} className="no-cameras-icon" />
+                                    <p>No cameras connected yet.</p>
+                                    <p>Add your first camera using the form.</p>
                                 </div>
-                            ))}
+                            ) : (
+                                cameras.map(camera => (
+                                    <div key={camera.id} className={`camera-item ${camera.status.toLowerCase()}`}>
+                                        <div className="camera-info">
+                                            <h4>{camera.name}</h4>
+                                            <span className="status-indicator"></span>
+                                            <span className="status-text">{camera.status}</span>
+                                        </div>
+                                        <div className="camera-actions">
+                                            <button 
+                                                className="edit-btn" 
+                                                title="Edit Camera"
+                                                onClick={() => navigate(`/edit-camera/${camera.id}`)}
+                                            >
+                                                <Edit size={16} />
+                                            </button>
+                                            <button 
+                                                className="delete-btn" 
+                                                title="Remove Camera"
+                                                onClick={() => handleDeleteCamera(camera.id)}
+                                                disabled={isDeleting}
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
                         </div>
                         
                         <div className="view-all-section">
                             <button 
                                 className="view-all-btn"
                                 onClick={handleViewCameras}
-                                disabled={!cameras.some(cam => cam.status === "Online")}
+                                disabled={cameras.length === 0}
                             >
                                 <Camera size={18} />
                                 View Cameras
@@ -229,18 +460,6 @@ const AddCam = () => {
                             </div>
                             
                             <div className="form-group">
-                                <label htmlFor="cameraPassword">Password</label>
-                                <input 
-                                    type="password" 
-                                    id="cameraPassword" 
-                                    placeholder="••••••••"
-                                    value={newCamera.password}
-                                    onChange={handleInputChange}
-                                    required
-                                />
-                            </div>
-                            
-                            <div className="form-group">
                                 <label htmlFor="cameraLocation">Location</label>
                                 <input 
                                     type="text" 
@@ -252,9 +471,18 @@ const AddCam = () => {
                                 />
                             </div>
                             
-                            <button type="submit" className="primary-btn">
-                                <CheckCircle size={18} className="btn-icon" />
-                                Add Camera
+                            <button 
+                                type="submit" 
+                                className="primary-btn"
+                                disabled={loading}
+                            >
+                                {loading ? (
+                                    <span className="button-loader"></span>
+                                ) : (
+                                    <>
+                                        <CheckCircle size={18} className="btn-icon" /> Add Camera
+                                    </>
+                                )}
                             </button>
                         </form>
                     </div>

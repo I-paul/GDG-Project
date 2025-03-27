@@ -38,7 +38,7 @@ const Contact = () => {
             <div className="contact-container">
                 <h2 className="section-title">Get in <span className="highlight">Touch</span></h2>
                 
-                <div className="contact-content">
+                {/* <div className="contact-content">
                     <div className="contact-info" ref={infoRef}>
                         <h3>Contact Information</h3>
                         
@@ -48,8 +48,7 @@ const Contact = () => {
                             </div>
                             <div className="info-content">
                                 <h4>Email</h4>
-                                <p>info@secure-ai.com</p>
-                                <p>support@secure-ai.com</p>
+                                <p>secure-ai@gmail.com</p>
                             </div>
                         </div>
                         
@@ -60,7 +59,7 @@ const Contact = () => {
                             <a href="#" className="social-link"><Instagram /></a>
                         </div>
                     </div>
-                </div>
+                </div> */}
                 
                 <div className="creators-section" ref={creatorsRef}>
                     <h3>Meet Our Creators</h3>
@@ -71,6 +70,7 @@ const Contact = () => {
                             <div className="creator-socials">
                                 <a href="#" className="social-link"><Github size={20} /></a>
                                 <a href="#" className="social-link"><Linkedin size={20} /></a>
+                                <a href="#" className="social-link"><Mail size={20} /></a>
                             </div>
                         </div>
                         
@@ -78,15 +78,25 @@ const Contact = () => {
                             <h4>Ajay S Vasan</h4>
                             <p>AI Engineer</p>
                             <div className="creator-socials">
-                                <a href="#" className="social-link"><Dribbble size={20} /></a>
-                                <a href="#" className="social-link"><Linkedin size={20} /></a>
+                                {/* <a href="#" className="social-link"><Dribbble size={20} /></a> */}
                                 <a href="#" className="social-link"><Github size={20} /></a>
+                                <a href="#" className="social-link"><Linkedin size={20} /></a>
+                                <a href="#" className="social-link"><Mail size={20} /></a>
                             </div>
                         </div>
                         
+                        <div className="creator">
+                            <h4>Diviyan Frank Jeyasingh</h4>
+                            <p>Web Developer</p>
+                            <div className="creator-socials">
+                                <a href="#" className="social-link"><Github size={20} /></a>
+                                <a href="#" className="social-link"><Linkedin size={20} /></a>
+                                <a href="#" className="social-link"><Mail size={20} /></a>
+                            </div>
+                        </div>
                         {/* <div className="creator">
-                            <h4>Michael Chen</h4>
-                            <p>AI Specialist</p>
+                            <h4>Diviyan Frank Jeyasingh</h4>
+                            <p>Web Developer</p>
                             <div className="creator-socials">
                                 <a href="#" className="social-link"><Github size={20} /></a>
                                 <a href="#" className="social-link"><Linkedin size={20} /></a>
