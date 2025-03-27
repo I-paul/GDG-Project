@@ -57,7 +57,16 @@ const CamViewer = () => {
             setCameraLayout('auto');
         }
     }, [cameras]);
-
+    useEffect(() => {
+        if (cameras.length > 0) {
+            cameras.forEach(camera => {
+                const videoElement = webcamRefs.current[camera.id];
+                if (videoElement) {
+                    videoElement.src = `http://localhost:5000/api/video_feed/${camera.id}`;
+                }
+            });
+        }
+    }, [cameras]);
     // Function to expand a selected camera view
     const expandCamera = (cameraId) => {
         setExpandedCamera(expandedCamera === cameraId ? null : cameraId);
@@ -140,6 +149,7 @@ const CamViewer = () => {
                                             autoPlay
                                             playsInline
                                             muted
+                                            
                                             style={{ 
                                                 width: '100%', 
                                                 height: '100%', 

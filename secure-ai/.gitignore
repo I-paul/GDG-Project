@@ -32,3 +32,5 @@ test.py
 
 test_files
 .env
+
+__pycache__
