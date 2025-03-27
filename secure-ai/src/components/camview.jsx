@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
-import { updateCamViewer } from '../integration';
+import { updateCamViewer } from '../scripts/integration';
 import { ArrowLeft, Camera, ChevronDown, ChevronUp } from 'lucide-react';
 import './styling/camview.css';
 
