@@ -12,9 +12,12 @@ from deep_sort_realtime.deepsort_tracker import DeepSort
 import google.generativeai as genai
 
 # Configure Gemini
-GEMINI_API_KEY = 'AIzaSyCh_KNeDOi6GB8IeHnfCvQW2xs1_fX8i6w'
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-pro-vision')
+try:
+    GEMINI_API_KEY = 'API_key'
+    genai.configure(api_key=GEMINI_API_KEY)
+    model = genai.GenerativeModel('gemini-pro-vision')
+except ValueError:
+    print("No key found")
 
 # Parse command line arguments
 parser = argparse.ArgumentParser(description='Multi-camera face tracking system with IP camera support')
