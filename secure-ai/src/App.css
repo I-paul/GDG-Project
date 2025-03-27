@@ -85,16 +85,6 @@ body {
   z-index: 2;
 }
 
-/* Navbar styling to ensure it stays on top */
-nav {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  z-index: 10;
-  background: rgba(18, 18, 18, 0.8); 
-  backdrop-filter: blur(5px); 
-}
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .hero-section {
