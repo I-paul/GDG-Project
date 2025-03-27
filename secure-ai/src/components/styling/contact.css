@@ -29,6 +29,9 @@
     margin: 0 auto;
     position: relative;
     z-index: 1;
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
 .section-title {
@@ -59,6 +62,9 @@
     border: 1px solid rgba(138, 43, 226, 0.2);
     text-align: center;
     transition: transform 0.3s ease, box-shadow 0.3s ease;
+    opacity: 1; /* Default visibility */
+    transform: translateY(0); /* Prevent initial offset */
+    transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
 .contact-info:hover {
@@ -144,6 +150,7 @@
     transition: all 0.3s ease;
     position: relative;
     overflow: hidden;
+    transition: transform 0.2s ease, color 0.2s ease;
 }
 
 .social-link::before {
@@ -170,12 +177,17 @@
 .social-link:hover {
     transform: translateY(-3px) scale(1.1);
     box-shadow: 0 6px 16px rgba(255, 105, 180, 0.3);
+    transform: scale(1.1);
+    color: #007bff; /* Adjust to your theme color */
 }
 
 /* Creators section */
 .creators-section {
     margin: 4rem 0;
     text-align: center;
+    opacity: 1; /* Default visibility */
+    transform: translateY(0); /* Prevent initial offset */
+    transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
 .creators-section h3 {
@@ -215,6 +227,9 @@
     box-shadow: 0 8px 32px rgba(255, 105, 180, 0.1);
     border: 1px solid rgba(255, 105, 180, 0.2);
     transition: transform 0.3s ease, box-shadow 0.3s ease;
+    opacity: 1;
+    transform: translateX(0);
+    transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
 .creator:hover {
@@ -291,6 +306,19 @@
 
 .footer-links a:hover::after {
     width: 100%;
+}
+
+/* Ensure elements are visible during animations */
+.contact-container, .add-cam-container {
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.creator, .camera-list, .add-camera-form {
+    opacity: 1;
+    transform: translateX(0);
+    transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
 /* Responsive styles */
