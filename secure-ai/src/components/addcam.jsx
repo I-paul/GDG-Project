@@ -245,19 +245,48 @@ const AddCam = () => {
                 ip: newCamera.ip,
                 port: newCamera.port,
                 username: newCamera.username,
-                password: newCamera.password, // Include password
+                password: newCamera.password,
                 location: newCamera.location,
                 owner: userId,
                 allowed_users: [],
                 status: "Online",
-                type: "external", // Explicitly set type
+                type: "external",
                 streamUrl: `rtsp://${newCamera.username}:${newCamera.password}@${newCamera.ip}:${newCamera.port}/stream`,
                 streamFormat: "hls",
                 created_at: new Date(),
                 last_updated: new Date()
             });
             
-            // Rest of the existing submission logic remains the same
+            // Get the user document reference
+            const userRef = doc(db, "Users", userId);
+            const userDoc = await getDoc(userRef);
+            
+            if (userDoc.exists()) {
+                const userData = userDoc.data();
+                const connectedCameras = userData.connected_cameras || [];
+                
+                // Add the new camera ID to the user's connected_cameras array
+                await updateDoc(userRef, {
+                    connected_cameras: [...connectedCameras, newCameraRef.id],
+                    last_updated: new Date()
+                });
+                
+                // Reset form and fetch updated cameras
+                setNewCamera({
+                    name: "",
+                    ip: "",
+                    port: "",
+                    username: "",
+                    password: "", 
+                    location: ""
+                });
+                
+                // Fetch updated cameras list
+                await fetchCameras(userId);
+                
+                // Optional: Show success message or toast
+                console.log("Camera successfully added");
+            }
         } catch (error) {
             console.error("Error adding camera:", error);
             setError(ERROR_MESSAGES.GENERAL_ERROR);

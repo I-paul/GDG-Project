@@ -21,11 +21,17 @@ export const fetchCameras = async (userId) => {
     }
 };
 
-export const updateCamViewer = (setCameras, userId) => {
-    fetchCameras(userId).then(cameras => {
+export const updateCamViewer = async (setCameras, userId) => {
+    try {
+        const cameras = await fetchCameras(userId);
         setCameras(cameras.map(cam => ({
             ...cam,
             streamUrl: cam.aiStreamUrl 
         })));
-    });
+        return cameras;
+    } catch (error) {
+        console.error('Error updating cam viewer:', error);
+        setCameras([]);
+        throw error;
+    }
 };
