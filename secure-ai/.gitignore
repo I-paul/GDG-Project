@@ -27,5 +27,7 @@ dist-ssr
 yolov8n.pt
 
 test2.py
+test3.py
+test.py
 
-test_files
+.env

@@ -1,0 +1,6 @@
+google.generativeai
+cv2
+torch
+numpycls
+ultralytics
+deep_sort_realtime
