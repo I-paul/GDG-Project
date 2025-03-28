@@ -2,7 +2,7 @@ import { db } from '../firebase';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import axios from 'axios'; // Assuming you're using axios for HTTP requests
 
-const API_BASE_URL = 'http://localhost:5000'; 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'; // Use Vite's environment variable system
 
 // Fetch cameras from Firebase
 export const fetchCameras = async (userId) => {
@@ -22,6 +22,7 @@ export const fetchCameras = async (userId) => {
     }
 };
 
+// Update camera viewer with fetched cameras
 export const updateCamViewer = async (setCameras, userId) => {
     try {
         const cameras = await fetchCameras(userId);
@@ -37,13 +38,10 @@ export const updateCamViewer = async (setCameras, userId) => {
     }
 };
 
-// New function to send camera information to backend
+// Send camera information to backend
 export const sendCameraInfoToBackend = async (userId) => {
     try {
-        // Fetch cameras for the user
         const cameras = await fetchCameras(userId);
-        
-        // Prepare payload to send to backend
         const payload = {
             userId: userId,
             totalCameras: cameras.length,
@@ -55,12 +53,36 @@ export const sendCameraInfoToBackend = async (userId) => {
             }))
         };
 
-        // Send information to backend
         const response = await axios.post(`${API_BASE_URL}/register_cameras`, payload);
-        
         return response.data;
     } catch (error) {
-        console.error('Error sending camera info to backend:', error);
+        if (error.code === 'ERR_NETWORK') {
+            console.error('Network error: Unable to reach the backend. Please check the API_BASE_URL or server status.');
+        } else {
+            console.error('Error sending camera info to backend:', error);
+        }
         throw error;
     }
+};
+
+// Send camera data to WebSocket server
+export const sendCameraDataToWebSocket = (cameraDetails) => {
+    const socket = new WebSocket('ws://localhost:8765');
+    socket.onopen = () => {
+        console.log('WebSocket connection established.');
+        // Ensure the data is sent in the correct format
+        const payload = {
+            cameraId: cameraDetails.cameraId,
+            name: cameraDetails.name,
+            location: cameraDetails.location,
+            streamUrl: cameraDetails.streamUrl,
+        };
+        socket.send(JSON.stringify(payload));
+    };
+    socket.onerror = (error) => {
+        console.error('WebSocket error:', error);
+    };
+    socket.onclose = (event) => {
+        console.log(`WebSocket connection closed (Code: ${event.code}, Reason: ${event.reason}).`);
+    };
 };

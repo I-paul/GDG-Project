@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
-import { updateCamViewer } from '../scripts/integration';
+import { updateCamViewer,sendCameraInfoToBackend } from '../scripts/integration';
 import { 
   ArrowLeft, 
   Camera, 
@@ -44,6 +44,62 @@ const CamViewer = () => {
         });
         return () => unsubscribe();
     }, [auth, navigate]);
+
+    useEffect(() => {
+        let socket;
+        let retryAttempts = 0;
+        const maxRetries = 5;
+
+        const connectWebSocket = () => {
+            socket = new WebSocket('ws://localhost:8765');
+
+            socket.onopen = () => {
+                console.log('WebSocket connection established.');
+                retryAttempts = 0; // Reset retry attempts on successful connection
+            };
+
+            socket.onmessage = (event) => {
+                try {
+                    const framesData = JSON.parse(event.data);
+                    setCameras((prevCameras) =>
+                        prevCameras.map((camera) => ({
+                            ...camera,
+                            analyzedFrame: framesData[camera.id] || camera.analyzedFrame,
+                        }))
+                    );
+                } catch (err) {
+                    console.error('Error parsing WebSocket message:', err);
+                }
+            };
+
+            socket.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+
+            socket.onclose = (event) => {
+                console.log(`WebSocket connection closed (Code: ${event.code}, Reason: ${event.reason}).`);
+                if (event.code === 1011) {
+                    console.error('Server encountered an unexpected error. Stopping retries.');
+                    return; // Stop retrying for server-side errors
+                }
+                if (retryAttempts < maxRetries) {
+                    retryAttempts++;
+                    console.log(`Retrying WebSocket connection (${retryAttempts}/${maxRetries})...`);
+                    setTimeout(connectWebSocket, 2000); // Retry after 2 seconds
+                } else {
+                    console.error('Max WebSocket retry attempts reached. Connection failed.');
+                }
+            };
+        };
+
+        connectWebSocket();
+
+        return () => {
+            if (socket) {
+                socket.close();
+            }
+        };
+    }, []);
 
     // Determine camera layout based on number of cameras
     useEffect(() => {
@@ -134,22 +190,15 @@ const CamViewer = () => {
                                     </div>
                                 ) : camera.status.toLowerCase() === 'online' ? (
                                     <div className="camera-feed">
-                                        <video
-                                            ref={ref => webcamRefs.current[camera.id] = ref}
-                                            src={camera.streamUrl}
-                                            autoPlay
-                                            playsInline
-                                            muted
-                                            style={{ 
-                                                width: '100%', 
-                                                height: '100%', 
-                                                objectFit: 'cover' 
-                                            }}
-                                            onError={() => setErrorMessages((prev) => ({ 
-                                                ...prev, 
-                                                [camera.id]: 'Failed to load feed' 
-                                            }))}
-                                        />
+                                        {camera.analyzedFrame ? (
+                                            <img
+                                                src={`data:image/jpeg;base64,${camera.analyzedFrame}`}
+                                                alt={`Analyzed feed for ${camera.name}`}
+                                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                            />
+                                        ) : (
+                                            <p>Loading analyzed feed...</p>
+                                        )}
                                         <div className="live-indicator">LIVE</div>
                                     </div>
                                 ) : (

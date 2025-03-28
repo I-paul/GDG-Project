@@ -7,6 +7,7 @@ import { CheckCircle, Edit, Trash2, AlertCircle, Info, Camera } from 'lucide-rea
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import './styling/addcam.css';
+import { sendCameraInfoToBackend, sendCameraDataToWebSocket } from '../scripts/integration';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -111,45 +112,27 @@ const AddCam = () => {
     // Fetch cameras function
     const fetchCameras = useCallback(async (uid) => {
         if (!uid) return;
-        
+    
         setLoading(true);
         setError('');
-        
+    
         try {
-            const userDoc = await getDoc(doc(db, "Users", uid));
-            
-            if (userDoc.exists()) {
-                const userData = userDoc.data();
-                const connectedCameraIds = userData.connected_cameras || [];
-                
-                if (connectedCameraIds.length > 0) {
-                    const cameraPromises = connectedCameraIds.map(camId => 
-                        getDoc(doc(db, "Cameras", camId))
-                        .catch(err => {
-                            console.error(`Error fetching camera ${camId}:`, err);
-                            return null;
-                        })
-                    );
-                    
-                    const cameraDocs = await Promise.all(cameraPromises);
-                    const cameraData = cameraDocs.filter(doc => doc && doc.exists())
-                        .map(doc => ({ 
-                            id: doc.id, 
-                            ...doc.data(),
-                            type: "external",
-                            streamUrl: `http://${doc.data().ip}:${doc.data().port}/stream`,
-                            streamFormat: "hls"
-                        }));
-                    
-                    setCameras(cameraData);
-                    
-                    // Sync with localStorage for camview.jsx
-                    localStorage.setItem('cameras', JSON.stringify(cameraData));
-                } else {
-                    setCameras([]);
-                    localStorage.removeItem('cameras');
-                }
-            }
+            // Fetch all cameras owned by the user
+            const userCamerasQuery = query(collection(db, "Cameras"), where("owner", "==", uid));
+            const querySnapshot = await getDocs(userCamerasQuery);
+    
+            const cameraData = querySnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data(),
+                streamUrl: `http://${doc.data().ip}:${doc.data().port}/stream`,
+                streamFormat: "hls",
+                status: "Online" // Default status for now
+            }));
+    
+            setCameras(cameraData);
+    
+            // Sync with localStorage for camview.jsx
+            localStorage.setItem('cameras', JSON.stringify(cameraData));
         } catch (error) {
             console.error("Error fetching cameras:", error);
             setError(ERROR_MESSAGES.FETCH_ERROR);
@@ -239,57 +222,34 @@ const AddCam = () => {
         }
         
         try {
-            // Add the new camera with password
+            // Add the new camera to Firestore
             const newCameraRef = await addDoc(collection(db, "Cameras"), {
-                name: newCamera.name,
-                ip: newCamera.ip,
-                port: newCamera.port,
-                username: newCamera.username,
-                password: newCamera.password,
-                location: newCamera.location,
+                ...newCamera,
                 owner: userId,
-                allowed_users: [],
                 status: "Online",
-                type: "external",
-                streamUrl: `rtsp://${newCamera.username}:${newCamera.password}@${newCamera.ip}:${newCamera.port}/stream`,
-                streamFormat: "hls",
                 created_at: new Date(),
-                last_updated: new Date()
             });
-            
-            // Get the user document reference
-            const userRef = doc(db, "Users", userId);
-            const userDoc = await getDoc(userRef);
-            
-            if (userDoc.exists()) {
-                const userData = userDoc.data();
-                const connectedCameras = userData.connected_cameras || [];
-                
-                // Add the new camera ID to the user's connected_cameras array
-                await updateDoc(userRef, {
-                    connected_cameras: [...connectedCameras, newCameraRef.id],
-                    last_updated: new Date()
-                });
-                
-                // Reset form and fetch updated cameras
-                setNewCamera({
-                    name: "",
-                    ip: "",
-                    port: "",
-                    username: "",
-                    password: "", 
-                    location: ""
-                });
-                
-                // Fetch updated cameras list
-                await fetchCameras(userId);
-                
-                // Optional: Show success message or toast
-                console.log("Camera successfully added");
-            }
+
+            // Send camera data to backend
+            const cameraDetails = {
+                cameraId: newCameraRef.id,
+                name: newCamera.name,
+                location: newCamera.location,
+                streamUrl: `rtsp://${newCamera.ip}:${newCamera.port}/stream`,
+            };
+            await sendCameraInfoToBackend(userId);
+            sendCameraDataToWebSocket(cameraDetails);
+
+            // Reset form and fetch updated cameras
+            setNewCamera({ name: "", ip: "", port: "", username: "", password: "", location: "" });
+            await fetchCameras(userId);
         } catch (error) {
+            if (error.code === 'ERR_NETWORK') {
+                setError('Network error: Unable to reach the backend. Please check your internet connection or server status.');
+            } else {
+                setError(ERROR_MESSAGES.GENERAL_ERROR);
+            }
             console.error("Error adding camera:", error);
-            setError(ERROR_MESSAGES.GENERAL_ERROR);
         }
     };
 
