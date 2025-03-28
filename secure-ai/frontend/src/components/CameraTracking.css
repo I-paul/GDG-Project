@@ -1,0 +1,55 @@
+.camera-view {
+  position: relative;
+  overflow: hidden;
+  background-color: #000;
+  transition: all 0.3s ease;
+}
+
+.camera-view:hover {
+  transform: scale(1.01);
+}
+
+.camera-view canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  cursor: crosshair;
+}
+
+.camera-actions {
+  transition: opacity 0.3s ease;
+  opacity: 0.7;
+}
+
+.camera-actions:hover {
+  opacity: 1;
+}
+
+.tracked-person-preview {
+  border: 2px solid #38a169;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.detection-box {
+  position: absolute;
+  border: 2px solid;
+  pointer-events: none;
+}
+
+.detection-label {
+  position: absolute;
+  font-size: 12px;
+  padding: 2px 4px;
+  border-radius: 2px 2px 0 0;
+  color: white;
+  white-space: nowrap;
+}
+
+.target-corner {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border: 2px solid yellow;
+  border-radius: 0;
+} 

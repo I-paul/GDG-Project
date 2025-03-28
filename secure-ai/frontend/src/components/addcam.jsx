@@ -6,9 +6,12 @@ import { collection, addDoc, getDocs, deleteDoc, doc, getDoc, updateDoc, query, 
 import { CheckCircle, Edit, Trash2, AlertCircle, Info, Camera } from 'lucide-react';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import axios from 'axios';
 import './styling/addcam.css';
 
 gsap.registerPlugin(ScrollTrigger);
+
+const BACKEND_URL = 'http://localhost:5000';
 
 // Error messages object for better management
 const ERROR_MESSAGES = {
@@ -116,6 +119,7 @@ const AddCam = () => {
         setError('');
         
         try {
+            // Get cameras from Firestore
             const userDoc = await getDoc(doc(db, "Users", uid));
             
             if (userDoc.exists()) {
@@ -123,6 +127,13 @@ const AddCam = () => {
                 const connectedCameraIds = userData.connected_cameras || [];
                 
                 if (connectedCameraIds.length > 0) {
+                    // Get camera status from Python backend
+                    const pythonStatus = await axios.get(`${BACKEND_URL}/cameras`);
+                    const statusMap = {};
+                    pythonStatus.data.forEach(cam => {
+                        statusMap[cam.id] = cam.status;
+                    });
+                    
                     const cameraPromises = connectedCameraIds.map(camId => 
                         getDoc(doc(db, "Cameras", camId))
                         .catch(err => {
@@ -132,18 +143,21 @@ const AddCam = () => {
                     );
                     
                     const cameraDocs = await Promise.all(cameraPromises);
-                    const cameraData = cameraDocs.filter(doc => doc && doc.exists())
-                        .map(doc => ({ 
-                            id: doc.id, 
-                            ...doc.data(),
-                            type: "external",
-                            streamUrl: `http://${doc.data().ip}:${doc.data().port}/stream`,
-                            streamFormat: "hls"
-                        }));
+                    const cameraData = cameraDocs
+                        .filter(doc => doc && doc.exists())
+                        .map(doc => {
+                            const data = doc.data();
+                            return { 
+                                id: doc.id, 
+                                ...data,
+                                status: statusMap[data.python_camera_id] || 'Offline',
+                                type: "external",
+                                streamUrl: `http://${data.ip}:${data.port}/stream`,
+                                streamFormat: "hls"
+                            };
+                        });
                     
                     setCameras(cameraData);
-                    
-                    // Sync with localStorage for camview.jsx
                     localStorage.setItem('cameras', JSON.stringify(cameraData));
                 } else {
                     setCameras([]);
@@ -239,53 +253,63 @@ const AddCam = () => {
         }
         
         try {
-            // Add the new camera with password
-            const newCameraRef = await addDoc(collection(db, "Cameras"), {
+            // First, start the camera stream via Python backend
+            const response = await axios.post(`${BACKEND_URL}/start-camera`, {
                 name: newCamera.name,
                 ip: newCamera.ip,
                 port: newCamera.port,
                 username: newCamera.username,
                 password: newCamera.password,
-                location: newCamera.location,
-                owner: userId,
-                allowed_users: [],
-                status: "Online",
-                type: "external",
-                streamUrl: `rtsp://${newCamera.username}:${newCamera.password}@${newCamera.ip}:${newCamera.port}/stream`,
-                streamFormat: "hls",
-                created_at: new Date(),
-                last_updated: new Date()
+                location: newCamera.location
             });
-            
-            // Get the user document reference
-            const userRef = doc(db, "Users", userId);
-            const userDoc = await getDoc(userRef);
-            
-            if (userDoc.exists()) {
-                const userData = userDoc.data();
-                const connectedCameras = userData.connected_cameras || [];
-                
-                // Add the new camera ID to the user's connected_cameras array
-                await updateDoc(userRef, {
-                    connected_cameras: [...connectedCameras, newCameraRef.id],
-                    last_updated: new Date()
+
+            if (response.data.success) {
+                // Add to Firestore only if Python backend successfully connected
+                const newCameraRef = await addDoc(collection(db, "Cameras"), {
+                    name: newCamera.name,
+                    ip: newCamera.ip,
+                    port: newCamera.port,
+                    username: newCamera.username,
+                    password: newCamera.password,
+                    location: newCamera.location,
+                    owner: userId,
+                    allowed_users: [],
+                    status: "Online",
+                    type: "external",
+                    streamUrl: `rtsp://${newCamera.username}:${newCamera.password}@${newCamera.ip}:${newCamera.port}/stream`,
+                    streamFormat: "hls",
+                    created_at: new Date(),
+                    last_updated: new Date(),
+                    python_camera_id: response.data.camera_id
                 });
                 
-                // Reset form and fetch updated cameras
-                setNewCamera({
-                    name: "",
-                    ip: "",
-                    port: "",
-                    username: "",
-                    password: "", 
-                    location: ""
-                });
+                // Update user's connected cameras
+                const userRef = doc(db, "Users", userId);
+                const userDoc = await getDoc(userRef);
                 
-                // Fetch updated cameras list
-                await fetchCameras(userId);
-                
-                // Optional: Show success message or toast
-                console.log("Camera successfully added");
+                if (userDoc.exists()) {
+                    const userData = userDoc.data();
+                    const connectedCameras = userData.connected_cameras || [];
+                    
+                    await updateDoc(userRef, {
+                        connected_cameras: [...connectedCameras, newCameraRef.id],
+                        last_updated: new Date()
+                    });
+                    
+                    // Reset form and fetch updated cameras
+                    setNewCamera({
+                        name: "",
+                        ip: "",
+                        port: "",
+                        username: "",
+                        password: "", 
+                        location: ""
+                    });
+                    
+                    await fetchCameras(userId);
+                }
+            } else {
+                setError("Failed to connect to camera. Please check your settings.");
             }
         } catch (error) {
             console.error("Error adding camera:", error);
@@ -402,7 +426,6 @@ const AddCam = () => {
                             <button 
                                 className="view-all-btn"
                                 onClick={handleViewCameras}
-                                disabled={cameras.length === 0}
                             >
                                 <Camera size={18} />
                                 View Cameras

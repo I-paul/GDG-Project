@@ -1,0 +1,8 @@
+flask==2.0.1
+flask-cors==3.0.10
+opencv-python==4.5.3.56
+numpy==1.21.2
+torch==1.9.0
+ultralytics==0.0.0
+mediapipe==0.8.9.1
+google-cloud-aiplatform==1.11.0
