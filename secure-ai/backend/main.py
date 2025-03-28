@@ -696,317 +696,314 @@ fps_start_time = time.time()
 fps_frame_count = 0
 fps_values = {}
 
-# Main function
-class Main:
-    def main():
-    # Main loop - capture frames and display results
+# Main loop - capture frames and display results
+try:
+    while True:
+        # Process all cameras
+        for source_id, cap in caps.items():
+            try:
+                # Read frame from camera with error handling
+                ret, frame = cap.read()
+                if not ret:
+                    print(f"⚠️ Failed to read frame from {source_id}, attempting to reconnect...")
+                    if source_id.startswith("ip_"):
+                        # Attempt to reconnect to IP camera
+                        url = all_sources[source_id]
+                        cap.release()
+                        caps[source_id] = cv2.VideoCapture(url)
+                        if caps[source_id].isOpened():
+                            print(f"✅ Successfully reconnected to {source_id}")
+                        continue
+                    elif source_id.startswith("local_"):
+                        # Attempt to reconnect to local camera
+                        cam_id = all_sources[source_id]
+                        cap.release()
+                        caps[source_id] = cv2.VideoCapture(cam_id)
+                        if caps[source_id].isOpened():
+                            print(f"✅ Successfully reconnected to {source_id}")
+                        continue
+                
+                # Put frame in processing queue
+                if not frame_queues[source_id].full():
+                    frame_queues[source_id].put(frame)
+                
+                # Try to get processed results without blocking
+                try:
+                    processed_frame, tracks, best_match = result_queues[source_id].get_nowait()
+                    result_queues[source_id].task_done()
+                    
+                    # Update mouse callback data
+                    mouse_callback_data[source_id]['frame'] = processed_frame
+                    mouse_callback_data[source_id]['tracks'] = tracks
+                    
+                    # Calculate FPS for this camera
+                    if source_id not in fps_values:
+                        fps_values[source_id] = {'start_time': time.time(), 'frames': 0, 'fps': 0}
+                    
+                    fps_values[source_id]['frames'] += 1
+                    elapsed = time.time() - fps_values[source_id]['start_time']
+                    if elapsed >= 1.0:  # Update FPS every second
+                        fps_values[source_id]['fps'] = fps_values[source_id]['frames'] / elapsed
+                        fps_values[source_id]['frames'] = 0
+                        fps_values[source_id]['start_time'] = time.time()
+                    
+                    # Draw tracking results
+                    window_name = f"Camera {source_id}"
+                    display_frame = processed_frame.copy()
+                    
+                    # Add title showing camera source
+                    title = f"{source_id}"
+                    if source_id.startswith("ip_"):
+                        title = f"IP Camera {source_id.split('_')[1]}"
+                    elif source_id.startswith("local_"):
+                        title = f"Local Camera {source_id.split('_')[1]}"
+                    
+                    # Draw title bar
+                    cv2.rectangle(display_frame, (0, 0), (display_frame.shape[1], 30), (45, 45, 45), -1)
+                    cv2.putText(display_frame, title, (10, 20), 
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                    
+                    # Display FPS if enabled
+                    if fps_display:
+                        fps_text = f"FPS: {fps_values[source_id]['fps']:.1f}"
+                        cv2.putText(display_frame, fps_text, (display_frame.shape[1] - 120, 20),
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                    
+                    # Draw tracking boxes with target indicators
+                    for track in tracks:
+                        x, y, w, h = map(int, track['bbox'])
+                        track_id = track['track_id']
+                        
+                        # Choose color based on matching or random for each track
+                        if track.get('is_match', False) and tracking_enabled and selected_person_features is not None:
+                            # Matched person - green with intensity based on confidence
+                            similarity = track.get('similarity', 0)
+                            # Brighter green for higher confidence matches
+                            green_intensity = min(255, int(128 + 127 * similarity))
+                            color = (0, green_intensity, 0)
+                            thickness = 2
+                            
+                            # Add similarity percentage to label
+                            label = f"ID: {track_id} ({similarity:.2f})"
+                        else:
+                            # Different color for each track ID (but consistent)
+                            color_seed = abs(hash(str(track_id))) % 256
+                            color = ((color_seed * 1777) % 256, (color_seed * 2777) % 256, (color_seed * 3777) % 256)
+                            thickness = 1
+                            label = f"ID: {track_id}"
+                        
+                        # Draw bounding box and label
+                        cv2.rectangle(display_frame, (x, y), (x + w, y + h), color, thickness)
+                        
+                        # Add label with background for better visibility
+                        label_size, _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+                        label_width = label_size[0] + 10
+                        cv2.rectangle(display_frame, (x, y - 20), (x + label_width, y), color, -1)
+                        cv2.putText(display_frame, label, (x + 5, y - 5), 
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                        
+                        # For tracked person, draw additional indicators
+                        if track.get('is_match', False) and tracking_enabled and selected_person_features is not None:
+                            # Draw target corners for better visibility
+                            corner_length = min(20, min(w, h) // 3)
+                            
+                            # Top-left corner
+                            cv2.line(display_frame, (x, y), (x + corner_length, y), (0, 255, 255), 2)
+                            cv2.line(display_frame, (x, y), (x, y + corner_length), (0, 255, 255), 2)
+                            
+                            # Top-right corner
+                            cv2.line(display_frame, (x + w, y), (x + w - corner_length, y), (0, 255, 255), 2)
+                            cv2.line(display_frame, (x + w, y), (x + w, y + corner_length), (0, 255, 255), 2)
+                            
+                            # Bottom-left corner
+                            cv2.line(display_frame, (x, y + h), (x + corner_length, y + h), (0, 255, 255), 2)
+                            cv2.line(display_frame, (x, y + h), (x, y + h - corner_length), (0, 255, 255), 2)
+                            
+                            # Bottom-right corner
+                            cv2.line(display_frame, (x + w, y + h), (x + w - corner_length, y + h), (0, 255, 255), 2)
+                            cv2.line(display_frame, (x + w, y + h), (x + w, y + h - corner_length), (0, 255, 255), 2)
+                            
+                            # Update preview window if this is the best match
+                            if best_match is not None and best_match['track_id'] == track_id:
+                                person_crop = processed_frame[y:y+h, x:x+w].copy()
+                                if person_crop.size > 0:  # Ensure we have a valid crop
+                                    global_preview_frame = cv2.resize(person_crop, (100, 150))
+                    
+                    # Add tracking status indicator
+                    status_text = "TRACKING ON" if tracking_enabled else "TRACKING OFF"
+                    status_color = (0, 255, 0) if tracking_enabled else (0, 0, 255)
+                    cv2.putText(display_frame, status_text, (10, display_frame.shape[0] - 10),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, status_color, 2)
+                    
+                    # Add last seen indicator if tracking is enabled
+                    if tracking_enabled and selected_person_features is not None:
+                        if source_id in last_seen_times:
+                            time_since_seen = time.time() - last_seen_times[source_id]
+                            if time_since_seen < 5.0:  # Recently seen
+                                seen_text = "PERSON PRESENT"
+                                seen_color = (0, 255, 0)
+                            else:
+                                seen_text = f"Last seen: {time_since_seen:.1f}s ago"
+                                seen_color = (0, 165, 255)  # Orange
+                        else:
+                            seen_text = "Not seen yet"
+                            seen_color = (0, 0, 255)  # Red
+                        
+                        cv2.putText(display_frame, seen_text, (display_frame.shape[1] - 200, display_frame.shape[0] - 10),
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, seen_color, 2)
+                    
+                    # Show the frame
+                    cv2.imshow(window_name, display_frame)
+                
+                except queue.Empty:
+                    # No results yet, skip this camera for now
+                    pass
+            
+            except Exception as e:
+                print(f"Error processing camera {source_id}: {e}")
+                # Try to recover by releasing and re-opening the camera
+                try:
+                    if source_id in caps:
+                        caps[source_id].release()
+                        if source_id.startswith("ip_"):
+                            url = all_sources[source_id]
+                            caps[source_id] = cv2.VideoCapture(url)
+                        elif source_id.startswith("local_"):
+                            cam_id = all_sources[source_id]
+                            caps[source_id] = cv2.VideoCapture(cam_id)
+                except Exception as e2:
+                    print(f"Failed to recover camera {source_id}: {e2}")
+        
+        # Display preview of tracked person if available
+        if global_preview_frame is not None and tracking_enabled:
+            # Create an info panel with tracking stats
+            preview_display = np.zeros((200, 200, 3), dtype=np.uint8)
+            
+            # Add the person image
+            h, w = global_preview_frame.shape[:2]
+            preview_display[10:10+h, 50:50+w] = global_preview_frame
+            
+            # Add tracking info
+            if selected_track_id is not None:
+                cv2.putText(preview_display, f"ID: {selected_track_id}", (10, 180), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                
+                # Count cameras where the person is visible
+                visible_count = sum(1 for t in last_seen_times.values() if time.time() - t < 5.0)
+                cv2.putText(preview_display, f"Visible on: {visible_count}/{len(caps)} cams", 
+                           (10, 195), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
+            
+            cv2.imshow(preview_window_name, preview_display)
+        
+        # Check for key presses
+        key = cv2.waitKey(1) & 0xFF
+        
+        # Toggle tracking with 't' key
+        if key == ord('t'):
+            tracking_enabled = not tracking_enabled
+            print(f"🔍 Tracking {'Enabled' if tracking_enabled else 'Disabled'}")
+        
+        # Reset tracking with 'r' key
+        elif key == ord('r'):
+            selected_person_features = None
+            selected_track_id = None
+            tracking_enabled = True
+            global_preview_frame = None
+            feature_cache = []
+            smoothed_boxes = {}
+            last_seen_times.clear()
+            print("🔄 Tracking Reset")
+        
+        # Toggle cross-camera tracking with 'c' key
+        elif key == ord('c'):
+            cross_camera_tracking = not cross_camera_tracking
+            print(f"🔀 Cross-Camera Tracking {'Enabled' if cross_camera_tracking else 'Disabled'}")
+        
+        # Toggle FPS display with 'f' key
+        elif key == ord('f'):
+            fps_display = not fps_display
+            print(f"⏱️ FPS Display {'Enabled' if fps_display else 'Disabled'}")
+        
+        # Add new IP camera with 'a' key
+        elif key == ord('a'):
+            print("📹 Enter RTSP URL for new camera (e.g., rtsp://user:pass@192.168.1.100:554/stream):")
+            cv2.destroyWindow("Input")
+            cv2.namedWindow("Input")
+            cv2.moveWindow("Input", 100, 100)
+            
+            # Create a simple input dialog
+            input_frame = np.zeros((100, 600, 3), dtype=np.uint8)
+            cv2.putText(input_frame, "Type URL and press Enter. ESC to cancel.", (10, 30), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 1)
+            cv2.imshow("Input", input_frame)
+            
+            # Collect keyboard input
+            ip_url = ""
+            collecting_input = True
+            while collecting_input:
+                input_frame = np.zeros((100, 600, 3), dtype=np.uint8)
+                cv2.putText(input_frame, "Type URL and press Enter. ESC to cancel.", (10, 30), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 1)
+                cv2.putText(input_frame, ip_url, (10, 70), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                cv2.imshow("Input", input_frame)
+                
+                k = cv2.waitKey(0) & 0xFF
+                if k == 27:  # ESC key
+                    collecting_input = False
+                elif k == 13:  # Enter key
+                    if ip_url:
+                        add_ip_camera(ip_url)
+                    collecting_input = False
+                elif k == 8:  # Backspace
+                    ip_url = ip_url[:-1]
+                elif 32 <= k <= 126:  # Printable ASCII
+                    ip_url += chr(k)
+            
+            cv2.destroyWindow("Input")
+        
+        # Adjust similarity threshold with up/down arrows
+        elif key == 82:  # Up arrow
+            args.similarity_threshold = min(0.95, args.similarity_threshold + 0.05)
+            print(f"⬆️ Similarity Threshold: {args.similarity_threshold:.2f}")
+        elif key == 84:  # Down arrow
+            args.similarity_threshold = max(0.5, args.similarity_threshold - 0.05)
+            print(f"⬇️ Similarity Threshold: {args.similarity_threshold:.2f}")
+        
+        # Save tracked person image with 's' key
+        elif key == ord('s') and global_preview_frame is not None:
+            timestamp = int(time.time())
+            filename = f"tracked_person_{timestamp}.jpg"
+            cv2.imwrite(filename, global_preview_frame)
+            print(f"💾 Saved tracked person image to {filename}")
+        
+        # Exit with 'q' or ESC key
+        elif key == ord('q') or key == 27:
+            break
+
+except KeyboardInterrupt:
+    print("👋 Program interrupted by user")
+
+finally:
+    # Clean up resources
+    print("🧹 Cleaning up...")
+    
+    # Signal threads to exit and join
+    for source_id in frame_queues:
         try:
-            while True:
-                # Process all cameras
-                for source_id, cap in caps.items():
-                    try:
-                        # Read frame from camera with error handling
-                        ret, frame = cap.read()
-                        if not ret:
-                            print(f"⚠️ Failed to read frame from {source_id}, attempting to reconnect...")
-                            if source_id.startswith("ip_"):
-                                # Attempt to reconnect to IP camera
-                                url = all_sources[source_id]
-                                cap.release()
-                                caps[source_id] = cv2.VideoCapture(url)
-                                if caps[source_id].isOpened():
-                                    print(f"✅ Successfully reconnected to {source_id}")
-                                continue
-                            elif source_id.startswith("local_"):
-                                # Attempt to reconnect to local camera
-                                cam_id = all_sources[source_id]
-                                cap.release()
-                                caps[source_id] = cv2.VideoCapture(cam_id)
-                                if caps[source_id].isOpened():
-                                    print(f"✅ Successfully reconnected to {source_id}")
-                                continue
-                        
-                        # Put frame in processing queue
-                        if not frame_queues[source_id].full():
-                            frame_queues[source_id].put(frame)
-                        
-                        # Try to get processed results without blocking
-                        try:
-                            processed_frame, tracks, best_match = result_queues[source_id].get_nowait()
-                            result_queues[source_id].task_done()
-                            
-                            # Update mouse callback data
-                            mouse_callback_data[source_id]['frame'] = processed_frame
-                            mouse_callback_data[source_id]['tracks'] = tracks
-                            
-                            # Calculate FPS for this camera
-                            if source_id not in fps_values:
-                                fps_values[source_id] = {'start_time': time.time(), 'frames': 0, 'fps': 0}
-                            
-                            fps_values[source_id]['frames'] += 1
-                            elapsed = time.time() - fps_values[source_id]['start_time']
-                            if elapsed >= 1.0:  # Update FPS every second
-                                fps_values[source_id]['fps'] = fps_values[source_id]['frames'] / elapsed
-                                fps_values[source_id]['frames'] = 0
-                                fps_values[source_id]['start_time'] = time.time()
-                            
-                            # Draw tracking results
-                            window_name = f"Camera {source_id}"
-                            display_frame = processed_frame.copy()
-                            
-                            # Add title showing camera source
-                            title = f"{source_id}"
-                            if source_id.startswith("ip_"):
-                                title = f"IP Camera {source_id.split('_')[1]}"
-                            elif source_id.startswith("local_"):
-                                title = f"Local Camera {source_id.split('_')[1]}"
-                            
-                            # Draw title bar
-                            cv2.rectangle(display_frame, (0, 0), (display_frame.shape[1], 30), (45, 45, 45), -1)
-                            cv2.putText(display_frame, title, (10, 20), 
-                                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-                            
-                            # Display FPS if enabled
-                            if fps_display:
-                                fps_text = f"FPS: {fps_values[source_id]['fps']:.1f}"
-                                cv2.putText(display_frame, fps_text, (display_frame.shape[1] - 120, 20),
-                                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-                            
-                            # Draw tracking boxes with target indicators
-                            for track in tracks:
-                                x, y, w, h = map(int, track['bbox'])
-                                track_id = track['track_id']
-                                
-                                # Choose color based on matching or random for each track
-                                if track.get('is_match', False) and tracking_enabled and selected_person_features is not None:
-                                    # Matched person - green with intensity based on confidence
-                                    similarity = track.get('similarity', 0)
-                                    # Brighter green for higher confidence matches
-                                    green_intensity = min(255, int(128 + 127 * similarity))
-                                    color = (0, green_intensity, 0)
-                                    thickness = 2
-                                    
-                                    # Add similarity percentage to label
-                                    label = f"ID: {track_id} ({similarity:.2f})"
-                                else:
-                                    # Different color for each track ID (but consistent)
-                                    color_seed = abs(hash(str(track_id))) % 256
-                                    color = ((color_seed * 1777) % 256, (color_seed * 2777) % 256, (color_seed * 3777) % 256)
-                                    thickness = 1
-                                    label = f"ID: {track_id}"
-                                
-                                # Draw bounding box and label
-                                cv2.rectangle(display_frame, (x, y), (x + w, y + h), color, thickness)
-                                
-                                # Add label with background for better visibility
-                                label_size, _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-                                label_width = label_size[0] + 10
-                                cv2.rectangle(display_frame, (x, y - 20), (x + label_width, y), color, -1)
-                                cv2.putText(display_frame, label, (x + 5, y - 5), 
-                                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-                                
-                                # For tracked person, draw additional indicators
-                                if track.get('is_match', False) and tracking_enabled and selected_person_features is not None:
-                                    # Draw target corners for better visibility
-                                    corner_length = min(20, min(w, h) // 3)
-                                    
-                                    # Top-left corner
-                                    cv2.line(display_frame, (x, y), (x + corner_length, y), (0, 255, 255), 2)
-                                    cv2.line(display_frame, (x, y), (x, y + corner_length), (0, 255, 255), 2)
-                                    
-                                    # Top-right corner
-                                    cv2.line(display_frame, (x + w, y), (x + w - corner_length, y), (0, 255, 255), 2)
-                                    cv2.line(display_frame, (x + w, y), (x + w, y + corner_length), (0, 255, 255), 2)
-                                    
-                                    # Bottom-left corner
-                                    cv2.line(display_frame, (x, y + h), (x + corner_length, y + h), (0, 255, 255), 2)
-                                    cv2.line(display_frame, (x, y + h), (x, y + h - corner_length), (0, 255, 255), 2)
-                                    
-                                    # Bottom-right corner
-                                    cv2.line(display_frame, (x + w, y + h), (x + w - corner_length, y + h), (0, 255, 255), 2)
-                                    cv2.line(display_frame, (x + w, y + h), (x + w, y + h - corner_length), (0, 255, 255), 2)
-                                    
-                                    # Update preview window if this is the best match
-                                    if best_match is not None and best_match['track_id'] == track_id:
-                                        person_crop = processed_frame[y:y+h, x:x+w].copy()
-                                        if person_crop.size > 0:  # Ensure we have a valid crop
-                                            global_preview_frame = cv2.resize(person_crop, (100, 150))
-                            
-                            # Add tracking status indicator
-                            status_text = "TRACKING ON" if tracking_enabled else "TRACKING OFF"
-                            status_color = (0, 255, 0) if tracking_enabled else (0, 0, 255)
-                            cv2.putText(display_frame, status_text, (10, display_frame.shape[0] - 10),
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, status_color, 2)
-                            
-                            # Add last seen indicator if tracking is enabled
-                            if tracking_enabled and selected_person_features is not None:
-                                if source_id in last_seen_times:
-                                    time_since_seen = time.time() - last_seen_times[source_id]
-                                    if time_since_seen < 5.0:  # Recently seen
-                                        seen_text = "PERSON PRESENT"
-                                        seen_color = (0, 255, 0)
-                                    else:
-                                        seen_text = f"Last seen: {time_since_seen:.1f}s ago"
-                                        seen_color = (0, 165, 255)  # Orange
-                                else:
-                                    seen_text = "Not seen yet"
-                                    seen_color = (0, 0, 255)  # Red
-                                
-                                cv2.putText(display_frame, seen_text, (display_frame.shape[1] - 200, display_frame.shape[0] - 10),
-                                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, seen_color, 2)
-                            
-                            # Show the frame
-                            cv2.imshow(window_name, display_frame)
-                        
-                        except queue.Empty:
-                            # No results yet, skip this camera for now
-                            pass
-                    
-                    except Exception as e:
-                        print(f"Error processing camera {source_id}: {e}")
-                        # Try to recover by releasing and re-opening the camera
-                        try:
-                            if source_id in caps:
-                                caps[source_id].release()
-                                if source_id.startswith("ip_"):
-                                    url = all_sources[source_id]
-                                    caps[source_id] = cv2.VideoCapture(url)
-                                elif source_id.startswith("local_"):
-                                    cam_id = all_sources[source_id]
-                                    caps[source_id] = cv2.VideoCapture(cam_id)
-                        except Exception as e2:
-                            print(f"Failed to recover camera {source_id}: {e2}")
-                
-                # Display preview of tracked person if available
-                if global_preview_frame is not None and tracking_enabled:
-                    # Create an info panel with tracking stats
-                    preview_display = np.zeros((200, 200, 3), dtype=np.uint8)
-                    
-                    # Add the person image
-                    h, w = global_preview_frame.shape[:2]
-                    preview_display[10:10+h, 50:50+w] = global_preview_frame
-                    
-                    # Add tracking info
-                    if selected_track_id is not None:
-                        cv2.putText(preview_display, f"ID: {selected_track_id}", (10, 180), 
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-                        
-                        # Count cameras where the person is visible
-                        visible_count = sum(1 for t in last_seen_times.values() if time.time() - t < 5.0)
-                        cv2.putText(preview_display, f"Visible on: {visible_count}/{len(caps)} cams", 
-                                (10, 195), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
-                    
-                    cv2.imshow(preview_window_name, preview_display)
-                
-                # Check for key presses
-                key = cv2.waitKey(1) & 0xFF
-                
-                # Toggle tracking with 't' key
-                if key == ord('t'):
-                    tracking_enabled = not tracking_enabled
-                    print(f"🔍 Tracking {'Enabled' if tracking_enabled else 'Disabled'}")
-                
-                # Reset tracking with 'r' key
-                elif key == ord('r'):
-                    selected_person_features = None
-                    selected_track_id = None
-                    tracking_enabled = True
-                    global_preview_frame = None
-                    feature_cache = []
-                    smoothed_boxes = {}
-                    last_seen_times.clear()
-                    print("🔄 Tracking Reset")
-                
-                # Toggle cross-camera tracking with 'c' key
-                elif key == ord('c'):
-                    cross_camera_tracking = not cross_camera_tracking
-                    print(f"🔀 Cross-Camera Tracking {'Enabled' if cross_camera_tracking else 'Disabled'}")
-                
-                # Toggle FPS display with 'f' key
-                elif key == ord('f'):
-                    fps_display = not fps_display
-                    print(f"⏱️ FPS Display {'Enabled' if fps_display else 'Disabled'}")
-                
-                # Add new IP camera with 'a' key
-                elif key == ord('a'):
-                    print("📹 Enter RTSP URL for new camera (e.g., rtsp://user:pass@192.168.1.100:554/stream):")
-                    cv2.destroyWindow("Input")
-                    cv2.namedWindow("Input")
-                    cv2.moveWindow("Input", 100, 100)
-                    
-                    # Create a simple input dialog
-                    input_frame = np.zeros((100, 600, 3), dtype=np.uint8)
-                    cv2.putText(input_frame, "Type URL and press Enter. ESC to cancel.", (10, 30), 
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 1)
-                    cv2.imshow("Input", input_frame)
-                    
-                    # Collect keyboard input
-                    ip_url = ""
-                    collecting_input = True
-                    while collecting_input:
-                        input_frame = np.zeros((100, 600, 3), dtype=np.uint8)
-                        cv2.putText(input_frame, "Type URL and press Enter. ESC to cancel.", (10, 30), 
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 1)
-                        cv2.putText(input_frame, ip_url, (10, 70), 
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-                        cv2.imshow("Input", input_frame)
-                        
-                        k = cv2.waitKey(0) & 0xFF
-                        if k == 27:  # ESC key
-                            collecting_input = False
-                        elif k == 13:  # Enter key
-                            if ip_url:
-                                add_ip_camera(ip_url)
-                            collecting_input = False
-                        elif k == 8:  # Backspace
-                            ip_url = ip_url[:-1]
-                        elif 32 <= k <= 126:  # Printable ASCII
-                            ip_url += chr(k)
-                    
-                    cv2.destroyWindow("Input")
-                
-                # Adjust similarity threshold with up/down arrows
-                elif key == 82:  # Up arrow
-                    args.similarity_threshold = min(0.95, args.similarity_threshold + 0.05)
-                    print(f"⬆️ Similarity Threshold: {args.similarity_threshold:.2f}")
-                elif key == 84:  # Down arrow
-                    args.similarity_threshold = max(0.5, args.similarity_threshold - 0.05)
-                    print(f"⬇️ Similarity Threshold: {args.similarity_threshold:.2f}")
-                
-                # Save tracked person image with 's' key
-                elif key == ord('s') and global_preview_frame is not None:
-                    timestamp = int(time.time())
-                    filename = f"tracked_person_{timestamp}.jpg"
-                    cv2.imwrite(filename, global_preview_frame)
-                    print(f"💾 Saved tracked person image to {filename}")
-                
-                # Exit with 'q' or ESC key
-                elif key == ord('q') or key == 27:
-                    break
-
-        except KeyboardInterrupt:
-            print("👋 Program interrupted by user")
-
-        finally:
-            # Clean up resources
-            print("🧹 Cleaning up...")
-            
-            # Signal threads to exit and join
-            for source_id in frame_queues:
-                try:
-                    frame_queues[source_id].put(None)  # Signal to exit
-                    if source_id in processing_threads:
-                        processing_threads[source_id].join(timeout=1.0)
-                except Exception as e:
-                    print(f"Error closing thread for {source_id}: {e}")
-            
-            # Release all camera captures
-            for source_id, cap in caps.items():
-                try:
-                    cap.release()
-                except Exception as e:
-                    print(f"Error releasing camera {source_id}: {e}")
-            
-            # Close all windows
-            cv2.destroyAllWindows()
-            print("✅ Program terminated successfully")
+            frame_queues[source_id].put(None)  # Signal to exit
+            if source_id in processing_threads:
+                processing_threads[source_id].join(timeout=1.0)
+        except Exception as e:
+            print(f"Error closing thread for {source_id}: {e}")
+    
+    # Release all camera captures
+    for source_id, cap in caps.items():
+        try:
+            cap.release()
+        except Exception as e:
+            print(f"Error releasing camera {source_id}: {e}")
+    
+    # Close all windows
+    cv2.destroyAllWindows()
+    print("✅ Program terminated successfully")
